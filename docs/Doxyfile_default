@@ -1,0 +1,65 @@
+DOXYFILE_ENCODING      = UTF-8
+PROJECT_NAME           = "Smushy's Media Library"
+PROJECT_BRIEF          = cross-platform media library.
+PROJECT_LOGO           =
+CREATE_SUBDIRS         = YES
+CREATE_SUBDIRS_LEVEL   = 8
+ALLOW_UNICODE_NAMES    = NO
+OUTPUT_LANGUAGE        = English
+BRIEF_MEMBER_DESC      = YES
+REPEAT_BRIEF           = YES
+ABBREVIATE_BRIEF       = "The $name class" \
+                         "The $name widget" \
+                         "The $name file" \
+                         is \
+                         provides \
+                         specifies \
+                         contains \
+                         represents \
+                         a \
+                         an \
+                         the
+OPTIMIZE_OUTPUT_FOR_C  = YES
+MARKDOWN_SUPPORT       = YES
+TIMESTAMP              = YES
+HIDE_UNDOC_MEMBERS     = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_IF_INCOMPLETE_DOC = YES
+WARN_NO_PARAMDOC       = YES
+WARN_IF_UNDOC_ENUM_VAL = YES
+INPUT                  = ../README.md ../
+INPUT_ENCODING         = UTF-8
+FILE_PATTERNS          = *.h *.md
+RECURSIVE              = YES
+EXCLUDE                = ../build ../test ../media/internal ../docs ../TODO.md ../corelib
+EXCLUDE_PATTERNS       = */impl/*.c */win32/*.h
+EXCLUDE_SYMBOLS        = ___*
+EXAMPLE_PATTERNS       = *
+USE_MDFILE_AS_MAINPAGE = ../README.md
+HTML_HEADER            = ./doxygen-awesome/header.html
+HTML_EXTRA_STYLESHEET  = ./doxygen-awesome/doxygen-awesome.css ./doxygen-awesome/doxygen-awesome-sidebar-only.css ./doxygen-awesome/doxygen-awesome-sidebar-only-darkmode-toggle.css 
+HTML_EXTRA_FILES       = ./doxygen-awesome/doxygen-awesome-darkmode-toggle.js
+HTML_COLORSTYLE        = LIGHT
+HTML_COLORSTYLE_HUE    = 220
+HTML_COLORSTYLE_SAT    = 100
+HTML_COLORSTYLE_GAMMA  = 80
+HTML_DYNAMIC_MENUS     = YES
+HTML_DYNAMIC_SECTIONS  = NO
+HTML_INDEX_NUM_ENTRIES = 9999
+GENERATE_TREEVIEW      = YES
+FULL_SIDEBAR           = NO
+ENUM_VALUES_PER_LINE   = 4
+TREEVIEW_WIDTH         = 250
+GENERATE_LATEX         = FALSE
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = NO
+EXPAND_ONLY_PREDEF     = YES
+SEARCH_INCLUDES        = YES
+PREDEFINED             = CORE_DOXYGEN
+SKIP_FUNCTION_MACROS   = YES
+QUIET                  = YES
+TOC_INCLUDE_HEADINGS   = 0
+
+

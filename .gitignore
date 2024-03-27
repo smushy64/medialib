@@ -1,0 +1,6 @@
+docs/html
+build
+*.rdbg
+**/compile_flags.txt
+docs/Doxyfile_*
+!docs/Doxyfile_default

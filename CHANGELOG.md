@@ -16,6 +16,10 @@ Number between 0-255
 
 Indicates additions to API, minor bug fixes and other small changes.
 
+0.1.1
+-----
+- Makefile: fixed TARGET dependency on libcore
+
 0.1.0
 ------
 - First version.

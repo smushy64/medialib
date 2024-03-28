@@ -211,7 +211,7 @@ TEST_COMMAND_LINE := $(COMPILER_PATH) $(STD_VERSION)\
 	$(filter-out $(TEST_FILTER_LDFLAGS),$(LDFLAGS))\
 	-L./build -l$(subst lib,,$(TARGET_NAME))
 
-$(TARGET): ./build/libcore.dll print_info $(OUTPUT_OBJ_PATH) $(SOURCES_FILE)
+$(TARGET): $(LIBCORE_PATH)/lib$(LIBCORE_NAME).$(SO_EXT) print_info $(OUTPUT_OBJ_PATH) $(SOURCES_FILE)
 	@echo "Make: "$(DISPLAY_COMMAND_LINE)
 	$(COMMAND_LINE)
 

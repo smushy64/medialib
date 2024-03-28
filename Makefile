@@ -11,6 +11,7 @@ OUTPUT_OBJ_PATH := $(OUTPUT_PATH)/obj
 
 LIBCORE_NAME ?= core
 LIBCORE_PATH ?= $(OUTPUT_PATH)
+LIBCORE_SRC_PATH ?= ./corelib
 
 MAKEFLAGS += -s
 
@@ -147,13 +148,13 @@ endif
 
 STD_VERSION := -std=c11
 
-SOURCES      := $(call recurse,impl,*.c) ./corelib/impl/platform_dllmain.c
+SOURCES      := $(call recurse,impl,*.c) $(LIBCORE_SRC_PATH)/impl/platform_dllmain.c
 SOURCES_FILE := $(OUTPUT_OBJ_PATH)/media_temp.c
 
 CFLAGS        :=
 CPPFLAGS      := MEDIA_ENABLE_EXPORT 
 LDFLAGS       :=
-INCLUDE       :=
+INCLUDEFLAGS  := -I. -I$(LIBCORE_SRC_PATH)
 OUTPUT_FILE   :=
 WARNING_FLAGS :=
 
@@ -166,7 +167,6 @@ CPPFLAGS += MEDIA_LIB_VERSION_MINOR=$(MEDIA_LIB_VERSION_MINOR)
 CPPFLAGS += MEDIA_LIB_VERSION_PATCH=$(MEDIA_LIB_VERSION_PATCH)
 
 TEST_CPPFLAGS := $(subst MEDIA_ENABLE_EXPORT,,$(CPPFLAGS))
-INCLUDEFLAGS  := -I. -I./corelib
 
 OUTPUT_FILE      := -o $(TARGET)
 TEST_OUTPUT_FILE := -o $(TEST_TARGET)
@@ -338,6 +338,7 @@ help:
 	@echo "Compilation options for medialib:"
 	@echo "   LIBCORE_NAME=[name]             set name of libcore to compile/link to (default=core)."
 	@echo "   LIBCORE_PATH=[dir]              set path to libcore directory to skip compiling libcore (default=none)."
+	@echo "   LIBCORE_SRC_PATH=[dir]          set path to libcore source (default=./corelib)."
 	@echo "   TARGET_PLATFORM=[platform]      set target platform (default=current)"
 	@echo "                                   valid: win32, linux, macos, ios, android"
 	@echo "   TARGET_ARCH=[arch]              set target architecture (default=current)"

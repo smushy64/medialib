@@ -280,16 +280,17 @@ attr_media_api String media_surface_query_name( const MediaSurface* in_surface )
     return result;
 }
 attr_media_api void media_surface_set_name( MediaSurface* in_surface, String name ) {
+    if( !name.len ) {
+        return;
+    }
     surface_to_win32( in_surface );
 
-    if( name.len ) {
-        usize max_copy = name.len;
-        if( max_copy >= WIN32_SURFACE_NAME_CAP ) {
-            max_copy = WIN32_SURFACE_NAME_CAP - 1;
-        }
-        memory_copy( surface->name, name.cc, max_copy );
+    memory_zero( surface->name, surface->name_len );
+    usize max_copy = min( name.len, WIN32_SURFACE_NAME_CAP );
+    memory_copy( surface->name, name.cc, max_copy );
+    surface->name_len = max_copy;
+    if( surface->name_len == WIN32_SURFACE_NAME_CAP ) {
         surface->name[WIN32_SURFACE_NAME_CAP - 1] = 0;
-        surface->name_len = max_copy;
     }
 
     SetWindowTextA( surface->hwnd, surface->name );

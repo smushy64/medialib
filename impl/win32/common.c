@@ -76,8 +76,8 @@ def( XInputSetState );
 #undef def
 
 attr_media_api b32 media_initialize(
-    enum MediaLoggingLevel log_level,
-    MediaLoggingCallbackFN* log_callback, void* log_callback_params
+    CoreLoggingLevel log_level,
+    CoreLoggingCallbackFN* log_callback, void* log_callback_params
 ) {
     media_set_logging_level( log_level );
     media_set_logging_callback( log_callback, log_callback_params );
@@ -217,9 +217,7 @@ attr_media_api b32 media_initialize(
     global_win32_state->msg_wnd_thread = CreateThread(
         NULL, kibibytes(512), win32_message_window_thread,
         NULL, 0, NULL );
-    if( global_win32_state->msg_wnd_thread ) {
-        media_info( "[WIN32] message window thread created." );
-    } else {
+    if( !global_win32_state->msg_wnd_thread )  {
         win32_error( "failed to create message window thread!" );
         UnregisterClassA( global_win32_state->def_wndclass.lpszClassName, module );
         destroy();
@@ -283,48 +281,28 @@ HWND win32_get_active_window(void) {
 attr_unused void win32_error_text(
     DWORD error_code, usize format_len, const char* format, ...
 ) {
+    unused( error_code, format_len, format );
+#if defined(MEDIA_ENABLE_LOGGING)
     va_list va;
     va_start( va, format );
-    media_log_va( MEDIA_LOGGING_LEVEL_ERROR, format_len, format, va );
+    media_log_va( CORE_LOGGING_LEVEL_ERROR, format_len, format, va );
     va_end( va );
 
-    char error_buf[WIN32_MEDIA_ERROR_BUFFER_CAP] = {};
-    memory_copy(
-        error_buf, WIN32_MEDIA_ERROR_BUFFER_PREFIX,
-        sizeof( WIN32_MEDIA_ERROR_BUFFER_PREFIX ) );
-    usize len = sizeof(WIN32_MEDIA_ERROR_BUFFER_PREFIX) - 1;
+    char* buf = NULL;
 
-    DWORD dwFlags =
-        FORMAT_MESSAGE_FROM_SYSTEM    |
-        FORMAT_MESSAGE_IGNORE_INSERTS |
-        FORMAT_MESSAGE_MAX_WIDTH_MASK;
+    DWORD len = FormatMessageA(
+        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER,
+        NULL, error_code, GetSystemDefaultLangID(), (char*)&buf, 0, NULL );
 
-    DWORD win32_format_len = FormatMessageA(
-        dwFlags, NULL, error_code, 0,
-        error_buf + len,
-        WIN32_MEDIA_ERROR_BUFFER_CAP - len, NULL );
-    len += win32_format_len;
-    if(
-        len + (sizeof(WIN32_MEDIA_ERROR_BUFFER_SUFFIX) - 1) >
-        WIN32_MEDIA_ERROR_BUFFER_CAP
-    ) {
-        const usize sub = sizeof("..") + (sizeof(WIN32_MEDIA_ERROR_BUFFER_SUFFIX) - 1);
-        usize copy_pos = len - sub;
-        memory_copy(
-            error_buf + copy_pos,
-            "..." WIN32_MEDIA_ERROR_BUFFER_SUFFIX, sub );
-        len += sub;
-    } else {
-        memory_copy(
-            error_buf + len,
-            WIN32_MEDIA_ERROR_BUFFER_SUFFIX,
-            sizeof(WIN32_MEDIA_ERROR_BUFFER_SUFFIX) - 1 );
-        len += sizeof(WIN32_MEDIA_ERROR_BUFFER_SUFFIX) - 1;
+    if( len && buf ) {
+        String message;
+        message.len = len - 1;
+        message.cc  = buf;
+        media_error( "win32: [{u,X,f}] {s}", error_code, message );
+
+        LocalFree( buf );
     }
-
-    media_log(
-        MEDIA_LOGGING_LEVEL_ERROR, win32_format_len,
-        error_buf );
+#endif
 }
 
 #undef WIN32_MEDIA_ERROR_BUFFER_PREFIX

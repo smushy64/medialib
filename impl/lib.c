@@ -7,8 +7,6 @@
 #include "core/prelude.h"
 #include "media/attributes.h"
 #include "media/lib.h"
-#include "core/sync.h"
-#include "core/print.h"
 
 #if !defined(MEDIA_LIB_VERSION_MAJOR)
     #define MEDIA_LIB_VERSION_MAJOR 0
@@ -121,103 +119,57 @@ attr_media_api const char* media_command_line( usize* opt_out_len ) {
     return global_medialib_command_line;
 }
 
-attr_global enum MediaLoggingLevel global_media_logging_level = MEDIA_LOGGING_LEVEL_NONE;
-attr_global Mutex global_media_logging_mutex;
-attr_global b32 global_media_logging_mutex_created = false;
-attr_global MediaLoggingCallbackFN* global_media_logging_callback = NULL;
+attr_global CoreLoggingLevel global_media_logging_level = CORE_LOGGING_LEVEL_NONE;
+attr_global CoreLoggingCallbackFN* global_media_logging_callback = NULL;
 attr_global void* global_media_logging_callback_params = NULL;
 
-attr_media_api void media_set_logging_level( enum MediaLoggingLevel level ) {
-    if( !global_media_logging_mutex_created ) {
-        assert_log(
-            mutex_create( &global_media_logging_mutex ),
-            "failed to create media logging mutex!" );
-        global_media_logging_mutex_created = true;
-    }
-    mutex_lock( &global_media_logging_mutex );
-
+attr_media_api void media_set_logging_level( CoreLoggingLevel level ) {
     global_media_logging_level = level;
-
-    mutex_unlock( &global_media_logging_mutex );
 }
-attr_media_api enum MediaLoggingLevel media_query_logging_level(void) {
+attr_media_api CoreLoggingLevel media_query_logging_level(void) {
     return global_media_logging_level;
 }
 attr_media_api void media_set_logging_callback(
-    MediaLoggingCallbackFN* callback, void* params
+    CoreLoggingCallbackFN* callback, void* params
 ) {
-    if( !global_media_logging_mutex_created ) {
-        assert_log(
-            mutex_create( &global_media_logging_mutex ),
-            "failed to create media logging mutex!" );
-        global_media_logging_mutex_created = true;
-    }
-
-    mutex_lock( &global_media_logging_mutex );
-
     global_media_logging_callback        = callback;
     global_media_logging_callback_params = params;
-
-    mutex_unlock( &global_media_logging_mutex );
 }
 attr_media_api void media_clear_logging_callback(void) {
-    if( !global_media_logging_mutex_created ) {
-        assert_log(
-            mutex_create( &global_media_logging_mutex ),
-            "failed to create logging mutex!" );
-        global_media_logging_mutex_created = true;
-    }
-
-    mutex_lock( &global_media_logging_mutex );
-
     global_media_logging_callback        = NULL;
     global_media_logging_callback_params = NULL;
-
-    mutex_unlock( &global_media_logging_mutex );
 }
-attr_unused
-attr_internal usize internal_media_stream_logging_message(
-    void* target, usize count, const void* bytes
-) {
-    enum MediaLoggingLevel level = rcast( enum MediaLoggingLevel, target );
-    global_media_logging_callback(
-        level, count, (const char*)bytes,
-        global_media_logging_callback_params );
-
-    return 0;
-}
-attr_unused
-attr_always_inline inline
-attr_internal b32 internal_media_logging_level_valid( enum MediaLoggingLevel level ) {
-    return bitfield_check( global_media_logging_level, level ) != 0;
+attr_unused attr_always_inline inline
+attr_internal b32 internal_media_logging_level_valid( CoreLoggingLevel level ) {
+    if( !global_media_logging_level ) {
+        return false;
+    }
+    return global_media_logging_level >= level;
 }
 void media_log_va(
-    int level, usize format_len,
-    const char* format, va_list va
+    CoreLoggingLevel level, usize format_len,
+    const char* format, va_list va 
 ) {
-#if defined(MEDIA_ENABLE_LOGGING)
-    if( !global_media_logging_mutex_created ) {
+    if( !(
+        global_media_logging_callback &&
+        internal_media_logging_level_valid( level )
+    ) ) {
         return;
     }
 
-    if(
-        !internal_media_logging_level_valid( level ) ||
-        !global_media_logging_callback
-    ) {
-        return;
-    }
+    global_media_logging_callback(
+        level, format_len, format,
+        va, global_media_logging_callback_params );
+}
+void media_log(
+    CoreLoggingLevel level, usize format_len,
+    const char* format, ...
+) {
+    va_list va;
+    va_start( va, format );
 
-    mutex_lock( &global_media_logging_mutex );
+    media_log_va( level, format_len, format, va );
 
-    fmt_text_va(
-        internal_media_stream_logging_message, &level, format_len, format, va );
-
-    char c = '\n';
-    internal_media_stream_logging_message( &level, 1, &c );
-
-    mutex_unlock( &global_media_logging_mutex );
-#else
-    unused( level, format_len, format, va );
-#endif
+    va_end( va );
 }
 

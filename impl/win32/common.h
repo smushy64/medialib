@@ -80,8 +80,8 @@ attr_unused void win32_error_text(
 #if defined(MEDIA_ENABLE_LOGGING)
     #define win32_error( format, ... )\
         win32_error_text( GetLastError(),\
-            sizeof( str_red( "[MEDIA ERROR] [WIN32] " format ) ) - 1,\
-            str_red( "[MEDIA ERROR] [WIN32] " format ), ##__VA_ARGS__ )
+            sizeof( "win32: " format) - 1,\
+            "win32: " format, ##__VA_ARGS__ )
 #else
     #define win32_error( ... )
 #endif

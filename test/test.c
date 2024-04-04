@@ -25,29 +25,31 @@
 #include "media/audio.h"
 // IWYU pragma: end_keep
 
-#define LOG_LEVEL MEDIA_LOGGING_LEVEL_DEBUG | MEDIA_LOGGING_LEVEL_INFO | MEDIA_LOGGING_LEVEL_WARN | MEDIA_LOGGING_LEVEL_ERROR
-
 #define success( format, ... )\
     println( str_green( format ), ##__VA_ARGS__ )
 #define error( format, ... )\
     println( str_red( format ), ##__VA_ARGS__ )
 
 void log_callback(
-    enum MediaLoggingLevel level, usize message_length,
-    const char* message, void* params
+    CoreLoggingLevel level, usize len,
+    const char* msg, va_list va, void* params
 ) {
-    unused(level, params);
-    String msg;
-    msg.cc  = message;
-    msg.len = message_length;
+    Mutex* mtx = params;
+    mutex_lock( mtx );
     switch( level ) {
-        case MEDIA_LOGGING_LEVEL_ERROR:
-            print_err( "{s}", msg );
-            break;
-        default:
-            print( "{s}", msg );
-            break;
+        case CORE_LOGGING_LEVEL_ERROR: {
+            print_err( CONSOLE_COLOR_RED "error: " );
+            print_err_text_va( len, msg, va );
+            println_err( CONSOLE_COLOR_RESET );
+        } break;
+        case CORE_LOGGING_LEVEL_WARN: {
+            print( CONSOLE_COLOR_YELLOW "warning: " );
+            print_text_va( len, msg, va );
+            println( CONSOLE_COLOR_RESET );
+        } break;
+        default: break;
     }
+    mutex_unlock( mtx );
 }
 
 void callback(
@@ -173,8 +175,11 @@ int surface_thread( u32 thread_id, void* in_params ) {
 }
 
 int main( int argc, char** argv ) {
-    b32 result = media_initialize( LOG_LEVEL, log_callback, NULL );
+    Mutex mtx = {};
+    mutex_create( &mtx );
+    b32 result = media_initialize( CORE_LOGGING_LEVEL_WARN, log_callback, &mtx );
     if( !result ) {
+        mutex_destroy( &mtx );
         return 0;
     }
 
@@ -296,6 +301,7 @@ int main( int argc, char** argv ) {
 
     string_buf_free( &title );
     unused( argc, argv );
+    mutex_destroy( &mtx );
     return 0;
 }
 

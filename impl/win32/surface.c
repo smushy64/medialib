@@ -211,7 +211,6 @@ attr_media_api void media_surface_destroy( MediaSurface* in_surface ) {
     ReleaseDC( surface->hwnd, surface->hdc );
 
     DestroyWindow( surface->hwnd );
-    memory_free( surface, sizeof(*surface) );
 }
 attr_media_api void media_surface_pump_events( MediaSurface* in_surface ) {
     surface_to_win32( in_surface );

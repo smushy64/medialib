@@ -18,6 +18,10 @@ Indicates additions to API, minor bug fixes and other small changes.
 
 0.1.1
 -----
+- render:opengl: defined MEDIA_OPENGL_DEFAULT_*_VERSION so that default OpenGL version is uniform across platforms.
+- render:opengl: renamed OpenGLAttributes to MediaOpenGLAttributes and now is no longer heap-allocated.
+- surface: added media_surface_query_memory_requirement()
+- surface: no longer allocates surface memory, instead expects pre-allocated buffer.
 - lib: applied changes made to logging from corelib
 - bug:surface:win32: surface_set_name() would not clear previous name properly.
 - Makefile: fixed TARGET dependency on libcore

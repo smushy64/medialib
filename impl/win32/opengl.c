@@ -15,7 +15,6 @@
 
 #include "impl/win32/surface.h"
 
-// TODO(alicia): dont heap allocate?
 struct Win32OpenGLAttributes {
     DWORD dwFlags;
     int red, green, blue, alpha, depth, stencil;
@@ -35,6 +34,9 @@ struct Win32OpenGLAttributes {
         int attribs[9];
     };
 };
+static_assert(
+    sizeof(MediaOpenGLAttributes) >= sizeof(struct Win32OpenGLAttributes),
+    "MediaOpenGLAttributes is smaller than windows version!" );
 
 #define WGL_CONTEXT_MAJOR_VERSION_ARB             0x2091
 #define WGL_CONTEXT_MINOR_VERSION_ARB             0x2092
@@ -113,7 +115,7 @@ attr_media_api b32 media_render_gl_initialize(void) {
     #define load( mod, name ) do {\
         name = (name##FN*)GetProcAddress( global_win32_state->mod, #name );\
         if( !name ) {\
-            win32_error( "failed to load " #name " from library " #mod "!" );\
+            win32_error( "win32: failed to load " #name " from library " #mod "!" );\
             return false;\
         }\
     } while(0)
@@ -152,25 +154,20 @@ attr_internal void win32_gl_set_default_attr( struct Win32OpenGLAttributes* attr
     attr->__profile_mask = WGL_CONTEXT_PROFILE_MASK_ARB;
     attr->profile        = WGL_CONTEXT_CORE_PROFILE_BIT_ARB;
     attr->__major_mask   = WGL_CONTEXT_MAJOR_VERSION_ARB;
-    attr->major          = 3;
+    attr->major          = MEDIA_OPENGL_DEFAULT_MAJOR_VERSION;
     attr->__minor_mask   = WGL_CONTEXT_MINOR_VERSION_ARB;
-    attr->minor          = 0;
+    attr->minor          = MEDIA_OPENGL_DEFAULT_MINOR_VERSION;
     attr->__context_mask = WGL_CONTEXT_FLAGS_ARB;
     attr->context_flags  = 0;
 }
 
-attr_media_api OpenGLAttributes* media_render_gl_attr_create(void) {
-    struct Win32OpenGLAttributes* attr = HeapAlloc(
-        GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*attr) );
-    if( !attr ) {
-        return NULL;
-    }
-
-    win32_gl_set_default_attr( attr );
-    return (OpenGLAttributes*)attr;
+attr_media_api MediaOpenGLAttributes media_render_gl_attr_create(void) {
+    struct Win32OpenGLAttributes attr = {};
+    win32_gl_set_default_attr( &attr );
+    return rcast( MediaOpenGLAttributes, &attr );
 }
 attr_media_api b32 media_render_gl_attr_set(
-    OpenGLAttributes* in_attr, MediaOpenGLAttribute name, int value
+    MediaOpenGLAttributes* in_attr, MediaOpenGLAttribute name, int value
 ) {
     struct Win32OpenGLAttributes* attr = (struct Win32OpenGLAttributes*)in_attr;
     switch( name ) {
@@ -228,7 +225,7 @@ attr_media_api b32 media_render_gl_attr_set(
     return true;
 }
 attr_media_api int media_render_gl_attr_get(
-    OpenGLAttributes* in_attr, MediaOpenGLAttribute name
+    MediaOpenGLAttributes* in_attr, MediaOpenGLAttribute name
 ) {
     struct Win32OpenGLAttributes* attr = (struct Win32OpenGLAttributes*)in_attr;
     switch( name ) {
@@ -256,12 +253,9 @@ attr_media_api int media_render_gl_attr_get(
         default: return I32_MAX;
     }
 }
-attr_media_api void media_render_gl_attr_destroy( OpenGLAttributes* attr ) {
-    HeapFree( GetProcessHeap(), 0, attr );
-}
 
 attr_media_api OpenGLRenderContext* media_render_gl_context_create(
-    MediaSurface* in_surface, OpenGLAttributes* opt_attr
+    MediaSurface* in_surface, MediaOpenGLAttributes* opt_attr
 ) {
     surface_to_win32( in_surface );
 
@@ -345,13 +339,13 @@ attr_media_api OpenGLRenderContext* media_render_gl_context_create(
     if( !rc ) {
         switch( error ) {
             case ERROR_INVALID_VERSION_ARB: {
-                media_error( "[WIN32] failed to create opengl context because of invalid version!" );
+                media_error( "win32: failed to create opengl context because of invalid version!" );
             } break;
             case ERROR_INVALID_PROFILE_ARB: {
-                media_error( "[WIN32] failed to create opengl context because of invalid profile!" );
+                media_error( "win32: failed to create opengl context because of invalid profile!" );
             } break;
             default: {
-                media_error( "[WIN32 {u,X}] failed to create opengl context!", error );
+                media_error( "win32: [{u,X,f}] failed to create opengl context!", error );
             } break;
         }
         return NULL;

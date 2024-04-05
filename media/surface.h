@@ -246,6 +246,9 @@ attr_header String surface_callback_data_text_to_string(
 /// @param[in] params  (optional) User parameters.
 typedef void MediaSurfaceCallbackFN(
     const MediaSurface* surface, const MediaSurfaceCallbackData* data, void* params );
+/// @brief Query how much memory is required to create a new surface.
+/// @return Size of media surface.
+attr_media_api usize media_surface_query_memory_requirement(void);
 /// @brief Create a media surface.
 /// @param name Name of surface (this is the title of surface on supported platforms).
 /// @param x, y Position of surface.
@@ -255,16 +258,18 @@ typedef void MediaSurfaceCallbackFN(
 /// @param[in] opt_callback_params (optional) User parameters for
 /// surface callback function.
 /// @param[in] opt_parent (optional) Surface parent.
-/// @return Surface handle, NULL if function failed.
+/// @param[out] out_surface Pointer to memory to store surface in.
+/// Must be able to hold the result of media_surface_query_memory_requirement().
+/// @return True if created surface successfully.
 /// @note @c x and @c y are ignored if #MEDIA_SURFACE_CREATE_FLAG_FULLSCREEN is set.
 /// @note @c w and @c h are ignored if #MEDIA_SURFACE_CREATE_FLAG_FULLSCREEN is set
 /// (uses screen width and height instead).
 /// @note @c x and @c y are in terms of surface's top left corner.
 /// @note @c w and @c h are dimensions of surface's client area.
-attr_media_api MediaSurface* media_surface_create(
+attr_media_api b32 media_surface_create(
     String name, i32 x, i32 y, i32 w, i32 h,
     MediaSurfaceCreateFlags flags, MediaSurfaceCallbackFN* opt_callback,
-    void* opt_callback_params, MediaSurface* opt_parent );
+    void* opt_callback_params, MediaSurface* opt_parent, MediaSurface* out_surface );
 /// @brief Destroy a media surface.
 /// @param[in] surface Handle to surface to destroy.
 attr_media_api void media_surface_destroy( MediaSurface* surface );

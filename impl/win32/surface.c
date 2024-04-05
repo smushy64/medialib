@@ -87,10 +87,13 @@ attr_internal void win32_filter_list_to_string(
     const MediaPromptFileFilterList* list, char* buf );
 attr_internal void win32_format_commdlg_error( DWORD error );
 
-attr_media_api MediaSurface* media_surface_create(
+attr_media_api usize media_surface_query_memory_requirement(void) {
+    return sizeof( struct Win32Surface );
+}
+attr_media_api b32 media_surface_create(
     String name, i32 x, i32 y, i32 w, i32 h,
     MediaSurfaceCreateFlags flags, MediaSurfaceCallbackFN* opt_callback,
-    void* opt_callback_params, MediaSurface* opt_parent
+    void* opt_callback_params, MediaSurface* opt_parent, MediaSurface* out_surface
 ) {
     HWND parent = NULL;
     if( opt_parent ) {
@@ -105,16 +108,15 @@ attr_media_api MediaSurface* media_surface_create(
     if( (opengl && vulkan) || (vulkan && directx) || (opengl && directx) ) {
         media_error(
             "surface: cannot combine multiple graphics backend create flags!" );
-        return NULL;
+        return false;
     }
 
-    struct Win32Surface* surface = memory_alloc( sizeof(*surface) );
+    struct Win32Surface* surface = out_surface;
     if( !surface ) {
-        win32_error(
-            "failed to allocate {f,.2,m} for surface!",
-            (f64)sizeof(*surface) );
-        return NULL;
+        win32_error( "out_surface must point to valid memory!" );
+        return false;
     }
+
     surface->callback        = opt_callback;
     surface->callback_params = opt_callback_params;
     surface->flags           = flags;
@@ -198,10 +200,9 @@ attr_media_api MediaSurface* media_surface_create(
         media_surface_set_mode(
             (MediaSurface*)surface, MEDIA_SURFACE_MODE_FULLSCREEN );
     }
-    return (MediaSurface*)surface;
+    return true;
 media_surface_create_failed:
-    memory_free( surface, sizeof(*surface) );
-    return NULL;
+    return false;
 }
 attr_media_api void media_surface_destroy( MediaSurface* in_surface ) {
     surface_to_win32( in_surface );

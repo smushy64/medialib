@@ -149,14 +149,17 @@ int surface_thread( u32 thread_id, void* in_params ) {
     struct SurfaceThreadParams* params = in_params;
 
     b32 should_run = true;
-    params->surface = media_surface_create(
+
+    params->surface = memory_alloc( media_surface_query_memory_requirement() );
+
+    if( !media_surface_create(
         string_text( "[0]" ), 900, 0, 800, 600,
         MEDIA_SURFACE_CREATE_FLAG_OPENGL      |
         MEDIA_SURFACE_CREATE_FLAG_RESIZEABLE  |
         MEDIA_SURFACE_CREATE_FLAG_DARK_MODE,
-        callback, &should_run, NULL );
-
-    if( !params->surface ) {
+        callback, &should_run, NULL, params->surface
+    ) ) {
+        memory_free( params->surface, media_surface_query_memory_requirement() );
         read_write_fence();
         params->status = -1;
         return -1;
@@ -212,21 +215,15 @@ int main( int argc, char** argv ) {
         return -1;
     }
 
-    OpenGLAttributes* attr = media_render_gl_attr_create();
-    if( !attr ) {
-        error( "failed to create OpenGL attributes!" );
-        return -1;
-    }
+    MediaOpenGLAttributes attr = media_render_gl_attr_create();
     media_render_gl_attr_set(
-        attr, MEDIA_OPENGL_ATTR_PROFILE, MEDIA_OPENGL_PROFILE_CORE );
-    media_render_gl_attr_set( attr, MEDIA_OPENGL_ATTR_MAJOR, 4 );
-    media_render_gl_attr_set( attr, MEDIA_OPENGL_ATTR_MINOR, 5 );
-    media_render_gl_attr_set( attr, MEDIA_OPENGL_ATTR_DEBUG, false );
-    media_render_gl_attr_set( attr, MEDIA_OPENGL_ATTR_FORWARD_COMPATIBILITY, false );
+        &attr, MEDIA_OPENGL_ATTR_PROFILE, MEDIA_OPENGL_PROFILE_CORE );
+    media_render_gl_attr_set( &attr, MEDIA_OPENGL_ATTR_MAJOR, 4 );
+    media_render_gl_attr_set( &attr, MEDIA_OPENGL_ATTR_MINOR, 5 );
+    media_render_gl_attr_set( &attr, MEDIA_OPENGL_ATTR_DEBUG, false );
+    media_render_gl_attr_set( &attr, MEDIA_OPENGL_ATTR_FORWARD_COMPATIBILITY, false );
     OpenGLRenderContext* glrc =
-        media_render_gl_context_create( thread_params.surface, attr );
-
-    media_render_gl_attr_destroy( attr );
+        media_render_gl_context_create( thread_params.surface, &attr );
 
     if( !glrc ) {
         return -1;

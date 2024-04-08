@@ -816,8 +816,8 @@ LRESULT win32_winproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
             y = win32_get_mouse_pos( lparam );
 
             data.type = MEDIA_SURFACE_CALLBACK_TYPE_MOUSE_MOVE_DELTA;
-            data.mouse_delta.x = x.v;
-            data.mouse_delta.y = y.v;
+            data.mouse_delta.x =  x.v;
+            data.mouse_delta.y = -y.v;
 
             cb();
         } return 0;

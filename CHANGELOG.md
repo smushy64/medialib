@@ -18,6 +18,7 @@ Indicates additions to API, minor bug fixes and other small changes.
 
 0.1.1
 -----
+- surface:win32: message thread no longer calls WaitMessage().
 - surface:win32: PostMessageA for WM_INPUT_MOUSE_POSITION_RELATIVE is always called.
 - surface:win32: bug: removed memory_free() call, surface is no longer allocated by medialib.
 - render:opengl: defined MEDIA_OPENGL_DEFAULT_*_VERSION so that default OpenGL version is uniform across platforms.

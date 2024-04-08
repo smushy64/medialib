@@ -928,7 +928,7 @@ DWORD win32_message_window_thread( LPVOID in_params ) {
         }
 
         // Sleep thread until more messages are available.
-        WaitMessage();
+        // WaitMessage();
     }
 
     UnregisterClassA( message_class.lpszClassName, module );

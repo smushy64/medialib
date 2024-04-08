@@ -101,8 +101,8 @@ void callback(
             //     name, data->mouse_move.x, data->mouse_move.y );
         } break;
         case MEDIA_SURFACE_CALLBACK_TYPE_MOUSE_MOVE_DELTA: {
-            // println( "{s}: mouse: {i,4}, {i,4}",
-            //     name, data->mouse_delta.x, data->mouse_delta.y );
+            println( "{s}: mouse: {i,4}, {i,4}",
+                name, data->mouse_delta.x, data->mouse_delta.y );
         } break;
         case MEDIA_SURFACE_CALLBACK_TYPE_MOUSE_WHEEL: {
             // println(

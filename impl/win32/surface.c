@@ -1153,10 +1153,8 @@ LRESULT win32_message_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) 
                 buttons_state, buttons_changed,
                 scroll, bitfield_check( mb->usButtonFlags, RI_MOUSE_HWHEEL ) );
 
-            if( rel_x || rel_y ) {
-                PostMessageA(
-                    data->active, WM_INPUT_MOUSE_POSITION_RELATIVE, rel_x, rel_y );
-            }
+            PostMessageA(
+                data->active, WM_INPUT_MOUSE_POSITION_RELATIVE, rel_x, rel_y );
             if( buttons_changed || scroll ) {
                 PostMessageA(
                     data->active, WM_INPUT_MOUSE_BUTTON,

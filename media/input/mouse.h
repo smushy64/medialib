@@ -1,5 +1,5 @@
-#if !defined(MEDIA_MOUSE_H)
-#define MEDIA_MOUSE_H
+#if !defined(MEDIA_INPUT_MOUSE_H)
+#define MEDIA_INPUT_MOUSE_H
 /**
  * @file   mouse.h
  * @brief  Mouse input handling.
@@ -22,6 +22,15 @@ typedef enum InputMouseButton : u8 {
     /// @brief Extra mouse button 2.
     INPUT_MOUSE_BUTTON_EXTRA_2 = (1 << 4),
 } InputMouseButton;
+/// @brief Query state of mouse buttons.
+/// @return Mouse buttons bitfield.
+attr_media_api InputMouseButton media_mouse_query_buttons(void);
+/// @brief Query absolute mouse position.
+/// @param[out] out_x, out_y Pointers to write absolute mouse positions to.
+attr_media_api void media_mouse_query_absolute( i32* out_x, i32* out_y );
+/// @brief Query mouse delta.
+/// @param[out] out_x, out_y Pointers to write mouse delta positions to.
+attr_media_api void media_mouse_query_delta( i32* out_x, i32* out_y );
 /// @brief Format #InputMouseButton as a string.
 /// @param button Button to format.
 /// @param[out] opt_out_len (optional) Length of format string.

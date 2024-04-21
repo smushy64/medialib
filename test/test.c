@@ -12,16 +12,13 @@
 #include "core/memory.h"
 #include "core/math.h"
 #include "core/collections.h"
-#define CORE_ENABLE_TIME_GLOBAL_ALIAS
 #include "core/time.h"
 #include "media/lib.h"
 #include "media/surface.h"
 #include "media/prompt.h"
 #include "media/render.h"
 #include "media/cursor.h"
-#include "media/keyboard.h"
-#include "media/gamepad.h"
-#include "media/mouse.h"
+#include "media/input.h"
 #include "media/audio.h"
 // IWYU pragma: end_keep
 
@@ -101,8 +98,8 @@ void callback(
             //     name, data->mouse_move.x, data->mouse_move.y );
         } break;
         case MEDIA_SURFACE_CALLBACK_TYPE_MOUSE_MOVE_DELTA: {
-            println( "{s}: mouse: {i,4}, {i,4}",
-                name, data->mouse_delta.x, data->mouse_delta.y );
+            // println( "{s}: mouse: {i,4}, {i,4}",
+            //     name, data->mouse_delta.x, data->mouse_delta.y );
         } break;
         case MEDIA_SURFACE_CALLBACK_TYPE_MOUSE_WHEEL: {
             // println(
@@ -186,6 +183,21 @@ int main( int argc, char** argv ) {
         return 0;
     }
 
+    usize input_buf_size = media_input_query_memory_requirement();
+    void* input_buf = memory_alloc( input_buf_size );
+    if( !input_buf ) {
+        media_shutdown();
+        mutex_destroy( &mtx );
+        return -1;
+    }
+    result = media_input_initialize( input_buf );
+    if( !result ) {
+        memory_free( input_buf, input_buf_size );
+        media_shutdown();
+        mutex_destroy( &mtx );
+        return -1;
+    }
+
     MediaAudioContext* audio = media_audio_initialize( 800 );
     if( !audio ) {
         media_shutdown();
@@ -262,14 +274,16 @@ int main( int argc, char** argv ) {
 
     media_render_gl_swap_interval( thread_params.surface, 1 );
 
-    time_global_timekeeping_initialize();
+    f64 last_time = time_high_resolution_seconds();
     // media_cursor_lock( thread_params.surface, true );
 
     #define UPDATE_COLOR_TIME (0.02f)
     while( thread_params.status ) {
+        media_input_update();
 
-        time_global_timekeeping_update();
-        f32 dt  = delta_time();
+        f64 time = time_high_resolution_seconds();
+        f32 dt = time - last_time;
+
         f32 fps = dt == 0.0f ? 0.0f : 1.0f / dt;
 
         string_buf_fmt( &title, "{f,.2} FPS{0}", fps );
@@ -286,6 +300,7 @@ int main( int argc, char** argv ) {
         media_render_gl_swap_buffers( thread_params.surface );
 
         title.len = 0;
+        last_time = time;
     }
 
     success( "everything seems good!" );
@@ -294,6 +309,10 @@ int main( int argc, char** argv ) {
     media_surface_destroy( thread_params.surface );
 
     media_audio_shutdown( audio );
+
+    media_input_shutdown();
+    memory_free( input_buf, input_buf_size );
+
     media_shutdown();
 
     string_buf_free( &title );

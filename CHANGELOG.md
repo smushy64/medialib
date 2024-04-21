@@ -1,6 +1,8 @@
 Changelog
 =========
 
+The following rules only apply to major versions >= 1.
+
 ## Major version
 Number between 0-65535.
 
@@ -18,6 +20,7 @@ Indicates additions to API, minor bug fixes and other small changes.
 
 0.1.1
 -----
+- input/win32: decoupled input handling from media_initialize into its own functions.
 - surface:win32: bug: mouse delta y was negative.
 - surface:win32: message thread no longer calls WaitMessage().
 - surface:win32: PostMessageA for WM_INPUT_MOUSE_POSITION_RELATIVE is always called.

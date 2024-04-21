@@ -1,5 +1,5 @@
-#if !defined(MEDIA_KEYBOARD_H)
-#define MEDIA_KEYBOARD_H
+#if !defined(MEDIA_INPUT_KEYBOARD_H)
+#define MEDIA_INPUT_KEYBOARD_H
 /**
  * @file   keyboard.h
  * @brief  Keyboard input handling.
@@ -8,6 +8,7 @@
 */
 #include "media/types.h"
 #include "media/attributes.h"
+#include "core/collections.h"
 
 /// @brief Key modifiers bitfield.
 typedef enum InputKeymod : u16 {
@@ -276,6 +277,10 @@ attr_media_api InputKeymod media_keyboard_query_mod(void);
 /// @param key Key to query.
 /// @return True if key is down, false if it's up.
 attr_media_api b32 media_keyboard_query_key( InputKeycode key );
+/// @brief Query state of the entire keyboard.
+/// @param[out] out_keyboard Packed boolean array to copy keyboard state to.
+attr_media_api void media_keyboard_query_keyboard(
+    b8 out_keyboard[packed_bool_memory_requirement(INPUT_KEYCODE_COUNT)] );
 
 /// @brief Get keycode name as a string.
 /// @param key Keycode to get name of.

@@ -12,7 +12,7 @@
 #include "core/types.h"
 #include "core/collections.h"
 #include "media/cursor.h"
-#include "media/keyboard.h"
+// #include "media/keyboard.h"
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -21,16 +21,9 @@
 #include <xinput.h>
 
 struct Win32State {
-    WNDCLASSEXA def_wndclass;
+    WNDCLASSEXA   def_wndclass;
     volatile HWND cursor_lock;
-    b8          active_gamepads[4];
-    u16         gamepad_rumble[4][2];
-    b32         gl_initialized;
-
-    volatile u16 msg_wnd_result;
-    volatile u16 msg_wnd_exit;
-    HANDLE       msg_wnd_thread;
-    HWND         msg_wnd;
+    b32           gl_initialized;
 
     DWORD pid;
 
@@ -48,25 +41,11 @@ struct Win32State {
     };
 
     HCURSOR cursors[MEDIA_CURSOR_COUNT];
-
-    enum InputKeymod keymod;
-    b8 keys[packed_bool_memory_requirement( INPUT_KEYCODE_COUNT )];
 };
 
 // NOTE(alicia): common constants and globals
 
 volatile extern struct Win32State* global_win32_state;
-
-#define WM_INPUT_KEYBOARD                (WM_USER + 1)
-#define WM_INPUT_KEYBOARD_TEXT           (WM_USER + 2)
-#define WM_INPUT_MOUSE_POSITION          (WM_USER + 3)
-#define WM_INPUT_MOUSE_POSITION_RELATIVE (WM_USER + 4)
-#define WM_INPUT_MOUSE_BUTTON            (WM_USER + 5)
-
-#define WIN32_MESSAGE_WINDOW_RESULT_PENDING  (0)
-#define WIN32_MESSAGE_WINDOW_RESULT_SUCCESS  (1)
-#define WIN32_MESSAGE_WINDOW_RESULT_ERROR    (2)
-#define WIN32_MESSAGE_WINDOW_RESULT_FINISHED (3)
 
 // NOTE(alicia): common functions
 

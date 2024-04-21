@@ -1,5 +1,5 @@
-#if !defined(MEDIA_GAMEPAD_H)
-#define MEDIA_GAMEPAD_H
+#if !defined(MEDIA_INPUT_GAMEPAD_H)
+#define MEDIA_INPUT_GAMEPAD_H
 /**
  * @file   gamepad.h
  * @brief  Gamepad input handling.

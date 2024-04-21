@@ -8,11 +8,12 @@
 
 #if defined(CORE_PLATFORM_WINDOWS)
 #include "core/sync.h"
-#include "core/memory.h"
 #include "core/print.h"
 
 #include "media/lib.h"
 #include "media/internal/logging.h"
+
+#include "impl/win32/input.h"
 
 #include <windowsx.h>
 
@@ -214,40 +215,19 @@ attr_media_api b32 media_initialize(
 
     read_write_fence();
 
-    global_win32_state->msg_wnd_thread = CreateThread(
-        NULL, kibibytes(512), win32_message_window_thread,
-        NULL, 0, NULL );
-    if( !global_win32_state->msg_wnd_thread )  {
-        win32_error( "failed to create message window thread!" );
-        UnregisterClassA( global_win32_state->def_wndclass.lpszClassName, module );
-        destroy();
-        return false;
-    }
-
-    read_write_fence();
-    while( !global_win32_state->msg_wnd_result ) {}
-    read_write_fence();
-
-    if( global_win32_state->msg_wnd_result == WIN32_MESSAGE_WINDOW_RESULT_ERROR ) {
-        UnregisterClassA( global_win32_state->def_wndclass.lpszClassName, module );
-        destroy();
-        return false;
-    }
-
     #undef open
     #undef load
     #undef destroy
     return true;
 }
 attr_media_api void media_shutdown(void) {
-    interlocked_increment( &global_win32_state->msg_wnd_exit );
-    read_write_fence();
-
-    while( global_win32_state->msg_wnd_result != WIN32_MESSAGE_WINDOW_RESULT_FINISHED )
-    {}
-
-    read_write_fence();
-
+#if defined(MEDIA_ENABLE_LOGGING) && defined(CORE_ENABLE_ASSERTIONS)
+    if( global_media_win32_input_state ) {
+        media_error(
+            "Attempted to shutdown media library before shutting down input!" );
+        panic();
+    }
+#endif
     HMODULE module = GetModuleHandleA( NULL );
     UnregisterClassA( global_win32_state->def_wndclass.lpszClassName, module );
     for( u32 i = 0; i < static_array_len( global_win32_state->modules ); ++i ) {

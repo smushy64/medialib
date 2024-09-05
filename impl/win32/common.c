@@ -1,293 +1,353 @@
 /**
  * @file   common.c
- * @brief  media/lib.h implementation.
+ * @brief  Media Windows Common.
  * @author Alicia Amarilla (smushyaa@gmail.com)
- * @date   March 27, 2024
+ * @date   August 10, 2024
 */
+#include "media/defines.h"
+#if defined(MEDIA_PLATFORM_WINDOWS)
 #include "impl/win32/common.h"
 
-#if defined(CORE_PLATFORM_WINDOWS)
-#include "core/sync.h"
-#include "core/print.h"
-
 #include "media/lib.h"
-#include "media/internal/logging.h"
+#include "media/input/keyboard.h"
 
-#include "impl/win32/input.h"
-
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
 #include <windowsx.h>
+#include <initguid.h>
 
-volatile struct Win32State* global_win32_state = NULL;
+struct Win32State* global_win32_state = NULL;
+m_bool32 global_win32_cursor_hidden   = false;
+HCURSOR global_win32_cursors[CURSOR_TYPE_COUNT];
+
+// NOTE(alicia): always request discrete graphics.
+__declspec(dllexport) DWORD NvOptimusEnablement                  = 0x00000001;
+__declspec(dllexport) int   AmdPowerXpressRequestHighPerformance = 1;
 
 #define def( fn )\
 fn##FN* in_##fn = NULL
 
-def( RegisterClassExA );
-def( UnregisterClassA );
+def( MessageBoxW );
+def( RegisterClassExW );
+def( UnregisterClassW );
+def( CreateWindowExW );
+def( DestroyWindow );
+def( DefWindowProcW );
 def( AdjustWindowRectEx );
 def( GetClientRect );
-def( CreateWindowExA );
-def( DestroyWindow );
-def( SetWindowTextA );
-def( SetWindowPos );
-def( GetWindowPlacement );
-def( SetWindowPlacement );
-def( RegisterRawInputDevices );
-def( GetRawInputData );
-def( SetWindowLongPtrA );
-def( GetWindowLongPtrA );
-def( PeekMessageA );
-def( DispatchMessageA );
-def( DefWindowProcA );
-def( MonitorFromWindow );
-def( MonitorFromPoint );
-def( GetMonitorInfoA );
-def( ClientToScreen );
-def( ShowCursor );
-def( SetCursorPos );
 def( GetDC );
 def( ReleaseDC );
 def( ShowWindow );
-def( MessageBoxA );
-def( PostMessageA );
-def( GetForegroundWindow );
-def( GetKeyState );
-def( PostQuitMessage );
-def( WaitMessage );
-def( LoadCursorA );
+def( PeekMessageW );
+def( TranslateMessage );
+def( DispatchMessageW );
+def( SetWindowTextW );
+def( SetWindowPos );
+def( MonitorFromPoint );
+def( MonitorFromWindow );
+def( GetMonitorInfoW );
+def( GetWindowPlacement );
+def( SetWindowPlacement );
 def( SetCursor );
-def( ClipCursor );
-def( MapWindowPoints );
-def( MapVirtualKeyA );
-def( ToUnicode );
-def( GetCursorPos );
-def( ScreenToClient );
+def( LoadCursorA );
+def( ShowCursor );
+def( ClientToScreen );
+def( SetCursorPos );
+def( MapVirtualKeyW );
+def( GetForegroundWindow );
 def( GetWindowThreadProcessId );
+def( PostMessageW );
+def( GetCursorPos );
+def( GetKeyState );
+def( ToUnicode );
+def( ScreenToClient );
+
+#if defined(MEDIA_ARCH_64_BIT)
+def( SetWindowLongPtrW );
+def( GetWindowLongPtrW );
+#else
+SetWindowLongWFN* in_SetWindowLongW = NULL;
+GetWindowLongWFN* in_GetWindowLongW = NULL;
+#endif
 
 def( GetStockObject );
 
+def( CoInitialize );
+def( CoCreateInstance );
+def( CoTaskMemFree );
+def( CoUninitialize );
+def( PropVariantClear );
+
 def( DwmSetWindowAttribute );
 
-def( GetOpenFileNameA );
-def( CommDlgExtendedError );
-
-def( XInputGetState );
-def( XInputSetState );
-
-#undef def
-
-attr_media_api b32 media_initialize(
-    CoreLoggingLevel log_level,
-    CoreLoggingCallbackFN* log_callback, void* log_callback_params
-) {
-    media_set_logging_level( log_level );
-    media_set_logging_callback( log_callback, log_callback_params );
-
-    #define destroy()\
-        for( u32 i = 0; i < static_array_len( global_win32_state->modules ); ++i ) {\
-            if( global_win32_state->modules[i] ) {\
-                FreeLibrary( global_win32_state->modules[i] );\
-            }\
-        }\
-        HeapFree( GetProcessHeap(), 0, (void*)global_win32_state )
-
-    global_win32_state = HeapAlloc(
-        GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*global_win32_state) );
+attr_internal void win32_unload_modules(void) {
     if( !global_win32_state ) {
-        media_error( "[WIN32] failed to allocate memory for win32!" );
+        return;
+    }
+    int module_count =
+        sizeof(global_win32_state->modules) /
+        sizeof(HMODULE);
+    for( int i = 0; i < module_count; ++i ) {
+        if( global_win32_state->modules.array[i] ) {
+            CloseHandle( global_win32_state->modules.array[i] );
+        }
+    }
+}
+
+attr_media_api m_uintptr media_lib_query_memory_requirement(void) {
+    return sizeof(struct Win32State);
+}
+attr_media_api m_bool32 media_lib_initialize(
+    MediaLoggingLevel       log_level,
+    MediaLoggingCallbackFN* opt_log_callback,
+    void*                   opt_log_callback_params,
+    void*                   buffer
+) {
+    media_lib_set_logging_level( log_level );
+    media_lib_set_logging_callback( opt_log_callback, opt_log_callback_params );
+
+    if( !buffer ) {
+        win32_error( "media_lib_initialize: buffer provided is null!" );
         return false;
     }
 
-    global_win32_state->pid = GetCurrentProcessId();
+    global_win32_state = buffer;
 
-    #define open( name ) do {\
-        global_win32_state->name = LoadLibraryA( #name ".DLL" );\
-        if( !global_win32_state->name ) {\
-            win32_error( "failed to open library " #name "!" );\
-            destroy();\
+    HMODULE module = GetModuleHandleW(0);
+
+    #define open( lib ) do {\
+        global_win32_state->modules.lib = LoadLibraryA( #lib ".DLL" );\
+        if( !global_win32_state->modules.lib ) {\
+            win32_error( "media_lib_initialize: failed to open library " #lib "!");\
+            win32_unload_modules();\
             return false;\
         }\
     } while(0)
-
-    #define load( mod, name ) do {\
-        name = (name##FN*)GetProcAddress( global_win32_state->mod, #name );\
-        if( !name ) {\
-            win32_error( "failed to load " #name " from library " #mod "!" );\
-            destroy();\
+    #define load( lib, fn ) do {\
+        fn = (fn##FN*)GetProcAddress( global_win32_state->modules.lib, #fn );\
+        if( !fn ) {\
+            win32_error( "media_lib_initialize: failed to load " #fn " from " #lib "!");\
+            win32_unload_modules();\
             return false;\
         }\
     } while(0)
 
     open( USER32 );
     open( GDI32 );
+    open( OLE32 );
     open( DWMAPI );
-    open( COMDLG32 );
 
-    load( USER32, RegisterClassExA );
-    load( USER32, UnregisterClassA );
+    load( USER32, MessageBoxW );
+    load( USER32, RegisterClassExW );
+    load( USER32, UnregisterClassW );
+    load( USER32, CreateWindowExW );
+    load( USER32, DestroyWindow );
+    load( USER32, DefWindowProcW );
     load( USER32, AdjustWindowRectEx );
     load( USER32, GetClientRect );
-    load( USER32, CreateWindowExA );
-    load( USER32, DestroyWindow );
-    load( USER32, SetWindowTextA );
-    load( USER32, SetWindowPos );
-    load( USER32, GetWindowPlacement );
-    load( USER32, SetWindowPlacement );
-    load( USER32, RegisterRawInputDevices );
-    load( USER32, GetRawInputData );
-    load( USER32, SetWindowLongPtrA );
-    load( USER32, GetWindowLongPtrA );
-    load( USER32, PeekMessageA );
-    load( USER32, DispatchMessageA );
-    load( USER32, DefWindowProcA );
-    load( USER32, MonitorFromWindow );
-    load( USER32, MonitorFromPoint );
-    load( USER32, GetMonitorInfoA );
-    load( USER32, ClientToScreen );
-    load( USER32, ShowCursor );
-    load( USER32, SetCursorPos );
     load( USER32, GetDC );
     load( USER32, ReleaseDC );
     load( USER32, ShowWindow );
-    load( USER32, MessageBoxA );
-    load( USER32, PostMessageA );
-    load( USER32, GetForegroundWindow );
-    load( USER32, GetKeyState );
-    load( USER32, PostQuitMessage );
-    load( USER32, WaitMessage );
-    load( USER32, LoadCursorA );
+    load( USER32, PeekMessageW );
+    load( USER32, TranslateMessage );
+    load( USER32, DispatchMessageW );
+    load( USER32, SetWindowTextW );
+    load( USER32, SetWindowPos );
+    load( USER32, MonitorFromPoint );
+    load( USER32, MonitorFromWindow );
+    load( USER32, GetMonitorInfoW );
+    load( USER32, GetWindowPlacement );
+    load( USER32, SetWindowPlacement );
     load( USER32, SetCursor );
-    load( USER32, ClipCursor );
-    load( USER32, MapWindowPoints );
-    load( USER32, MapVirtualKeyA );
-    load( USER32, ToUnicode );
-    load( USER32, GetCursorPos );
-    load( USER32, ScreenToClient );
+    load( USER32, LoadCursorA );
+    load( USER32, ShowCursor );
+    load( USER32, ClientToScreen );
+    load( USER32, SetCursorPos );
+    load( USER32, MapVirtualKeyW );
+    load( USER32, GetForegroundWindow );
     load( USER32, GetWindowThreadProcessId );
+    load( USER32, PostMessageW );
+    load( USER32, GetCursorPos );
+    load( USER32, GetKeyState );
+    load( USER32, ToUnicode );
+    load( USER32, ScreenToClient );
 
-    load( GDI32, GetStockObject );
-
-    load( DWMAPI, DwmSetWindowAttribute );
-
-    load( COMDLG32, GetOpenFileNameA );
-    load( COMDLG32, CommDlgExtendedError );
-
-    global_win32_state->XINPUT = LoadLibraryA( "XINPUT1_4.DLL" );
-    if( !global_win32_state->XINPUT ) {
-        global_win32_state->XINPUT = LoadLibraryA( "XINPUT9_1_0.DLL" );
-        if( !global_win32_state->XINPUT ) {
-            global_win32_state->XINPUT = LoadLibraryA( "XINPUT1_3.DLL" );
-            if( !global_win32_state->XINPUT ) {
-                win32_error( "failed to open any version of Xinput library!" );
-                destroy();
-                return false;
-            }
-        }
-    }
-
-    load( XINPUT, XInputGetState );
-    load( XINPUT, XInputSetState );
-
-    global_win32_state->cursors[MEDIA_CURSOR_ARROW]      = LoadCursorA( NULL, IDC_ARROW );
-    global_win32_state->cursors[MEDIA_CURSOR_HAND]       = LoadCursorA( NULL, IDC_HAND );
-    global_win32_state->cursors[MEDIA_CURSOR_TEXT]       = LoadCursorA( NULL, IDC_IBEAM );
-    global_win32_state->cursors[MEDIA_CURSOR_WAIT]       = LoadCursorA( NULL, IDC_WAIT );
-    global_win32_state->cursors[MEDIA_CURSOR_ARROW_WAIT] = LoadCursorA( NULL, IDC_APPSTARTING );
-    global_win32_state->cursors[MEDIA_CURSOR_SIZE_ALL]   = LoadCursorA( NULL, IDC_SIZEALL );
-    global_win32_state->cursors[MEDIA_CURSOR_SIZE_V]     = LoadCursorA( NULL, IDC_SIZENS );
-    global_win32_state->cursors[MEDIA_CURSOR_SIZE_H]     = LoadCursorA( NULL, IDC_SIZEWE );
-    global_win32_state->cursors[MEDIA_CURSOR_SIZE_L]     = LoadCursorA( NULL, IDC_SIZENWSE );
-    global_win32_state->cursors[MEDIA_CURSOR_SIZE_R]     = LoadCursorA( NULL, IDC_SIZENESW );
-
-    HMODULE module = GetModuleHandleA( NULL );
-
-    global_win32_state->def_wndclass.cbSize        = sizeof(global_win32_state->def_wndclass);
-    global_win32_state->def_wndclass.lpfnWndProc   = win32_winproc;
-    global_win32_state->def_wndclass.hInstance     = module;
-    global_win32_state->def_wndclass.lpszClassName = "LibMediaWindowClass";
-    global_win32_state->def_wndclass.hbrBackground = (HBRUSH)GetStockBrush( BLACK_BRUSH );
-
-    if( !RegisterClassExA( (const WNDCLASSEXA*)&global_win32_state->def_wndclass ) ) {
-        win32_error( "failed to register default window class!" );
-        destroy();
+#if defined(MEDIA_ARCH_64_BIT)
+    load( USER32, SetWindowLongPtrW );
+    load( USER32, GetWindowLongPtrW );
+#else
+    in_SetWindowLongW =
+        (SetWindowLongWFN*)GetProcAddress(
+            global_win32_state->modules.USER32, "SetWindowLongW" );
+    if( !in_SetWindowLongW ) {
+        win32_error( "failed to load SetWindowLongW from USER32!");
+        win32_unload_modules();
         return false;
     }
 
-    read_write_fence();
+    in_GetWindowLongW =
+        (GetWindowLongWFN*)GetProcAddress(
+            global_win32_state->modules.USER32, "GetWindowLongW" );
+    if( !in_GetWindowLongW ) {
+        win32_error( "failed to load GetWindowLongW from USER32!");
+        win32_unload_modules();
+        return false;
+    }
+#endif
+
+    load( GDI32, GetStockObject );
+
+    load( OLE32, CoInitialize );
+    load( OLE32, CoCreateInstance );
+    load( OLE32, CoTaskMemFree );
+    load( OLE32, CoUninitialize );
+    load( OLE32, PropVariantClear );
+
+    load( DWMAPI, DwmSetWindowAttribute );
+
+    if( !CoCheck( CoInitialize( NULL ) ) ) {
+        win32_error( "media_lib_initialize: failed to initialize COM!" );
+        win32_unload_modules();
+        return false;
+    }
+
+    WNDCLASSEXW default_window_class;
+    memset( &default_window_class, 0, sizeof(default_window_class) );
+    default_window_class.cbSize        = sizeof(default_window_class);
+    default_window_class.lpszClassName = WIN32_DEFAULT_WINDOW_CLASS;
+    default_window_class.hInstance     = module;
+    default_window_class.hbrBackground = GetStockBrush( BLACK_BRUSH );
+    default_window_class.lpfnWndProc   = win32_winproc;
+
+    if( !RegisterClassExW( &default_window_class ) ) {
+        win32_error( "media_lib_initialize: failed to register default window class!" );
+        win32_unload_modules();
+        CoUninitialize();
+        return false;
+    }
+
+    global_win32_cursors[CURSOR_TYPE_ARROW]      = LoadCursorA( NULL, IDC_ARROW );
+    global_win32_cursors[CURSOR_TYPE_HAND]       = LoadCursorA( NULL, IDC_HAND );
+    global_win32_cursors[CURSOR_TYPE_TEXT]       = LoadCursorA( NULL, IDC_IBEAM );
+    global_win32_cursors[CURSOR_TYPE_WAIT]       = LoadCursorA( NULL, IDC_WAIT );
+    global_win32_cursors[CURSOR_TYPE_ARROW_WAIT] = LoadCursorA( NULL, IDC_APPSTARTING );
+    global_win32_cursors[CURSOR_TYPE_SIZE_ALL]   = LoadCursorA( NULL, IDC_SIZEALL );
+    global_win32_cursors[CURSOR_TYPE_SIZE_V]     = LoadCursorA( NULL, IDC_SIZENS );
+    global_win32_cursors[CURSOR_TYPE_SIZE_H]     = LoadCursorA( NULL, IDC_SIZEWE );
+    global_win32_cursors[CURSOR_TYPE_SIZE_L]     = LoadCursorA( NULL, IDC_SIZENWSE );
+    global_win32_cursors[CURSOR_TYPE_SIZE_R]     = LoadCursorA( NULL, IDC_SIZENESW );
+
+    m_bool32 caps   = GetKeyState( VK_CAPITAL ) & 0x0001;
+    m_bool32 scroll = GetKeyState( VK_SCROLL )  & 0x0001;
+    m_bool32 num    = GetKeyState( VK_NUMLOCK ) & 0x0001;
+
+    global_win32_state->mod |= caps   ? KBMOD_CAPSLK : 0;
+    global_win32_state->mod |= scroll ? KBMOD_SCRLK  : 0;
+    global_win32_state->mod |= num    ? KBMOD_NUMLK  : 0;
 
     #undef open
     #undef load
-    #undef destroy
     return true;
 }
-attr_media_api void media_shutdown(void) {
-#if defined(MEDIA_ENABLE_LOGGING) && defined(CORE_ENABLE_ASSERTIONS)
-    if( global_media_win32_input_state ) {
-        media_error(
-            "Attempted to shutdown media library before shutting down input!" );
-        panic();
-    }
-#endif
-    HMODULE module = GetModuleHandleA( NULL );
-    UnregisterClassA( global_win32_state->def_wndclass.lpszClassName, module );
-    for( u32 i = 0; i < static_array_len( global_win32_state->modules ); ++i ) {
-        if( global_win32_state->modules[i] ) {
-            FreeLibrary( global_win32_state->modules[i] );
-        }
-    }
+attr_media_api void media_lib_shutdown(void) {
+    CoUninitialize();
+    
+    HMODULE module = GetModuleHandleA(0);
 
-    HeapFree( GetProcessHeap(), 0, (void*)global_win32_state );
+    UnregisterClassW( WIN32_DEFAULT_WINDOW_CLASS, module );
+
+    win32_unload_modules();
+
+    memset( global_win32_state, 0, sizeof(*global_win32_state) );
+    global_win32_state = NULL;
 }
 
-HWND win32_get_active_window(void) {
-    HWND active = GetForegroundWindow();
-    DWORD pid;
-    GetWindowThreadProcessId( active, &pid );
-    if( pid != global_win32_state->pid ) {
+attr_media_api void cursor_set_visible( m_bool32 is_visible ) {
+    global_win32_cursor_hidden = !is_visible;
+}
+
+wchar_t* win32_utf8_to_ucs2_alloc(
+    m_uint32 utf8_len, const char* utf8, m_uint32* opt_out_len
+) {
+    int required_len = MultiByteToWideChar( CP_UTF8, 0, utf8, utf8_len, 0, 0 );
+    wchar_t* res = HeapAlloc( 
+        GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(wchar_t) * (required_len + 1));
+    if( !res ) {
         return NULL;
     }
 
-    return active;
-}
-
-#define WIN32_MEDIA_ERROR_BUFFER_PREFIX CONSOLE_COLOR_RED "[WIN32] "
-#define WIN32_MEDIA_ERROR_BUFFER_SUFFIX CONSOLE_COLOR_RESET "\n"
-#define WIN32_MEDIA_ERROR_BUFFER_CAP\
-    (255 + (\
-        (sizeof(WIN32_MEDIA_ERROR_BUFFER_PREFIX) - 1) +\
-        (sizeof(WIN32_MEDIA_ERROR_BUFFER_SUFFIX) - 1)\
-    ) )
-
-attr_unused void win32_error_text(
-    DWORD error_code, usize format_len, const char* format, ...
-) {
-    unused( error_code, format_len, format );
-#if defined(MEDIA_ENABLE_LOGGING)
-    va_list va;
-    va_start( va, format );
-    media_log_va( CORE_LOGGING_LEVEL_ERROR, format_len, format, va );
-    va_end( va );
-
-    char* buf = NULL;
-
-    DWORD len = FormatMessageA(
-        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER,
-        NULL, error_code, GetSystemDefaultLangID(), (char*)&buf, 0, NULL );
-
-    if( len && buf ) {
-        String message;
-        message.len = len - 1;
-        message.cc  = buf;
-        media_error( "win32: [{u,X,f}] {s}", error_code, message );
-
-        LocalFree( buf );
+    MultiByteToWideChar( CP_UTF8, 0, utf8, utf8_len, res, required_len + 1 );
+    if( opt_out_len ) {
+        *opt_out_len = required_len;
     }
-#endif
+    return res;
+}
+MONITORINFO win32_monitor_info( HWND opt_hwnd ) {
+    HMONITOR monitor = NULL;
+    if( opt_hwnd ) {
+        monitor = MonitorFromWindow( opt_hwnd, MONITOR_DEFAULTTONEAREST );
+    } else {
+        POINT pt;
+        pt.x = 0;
+        pt.y = 0;
+        monitor = MonitorFromPoint( pt, MONITOR_DEFAULTTONEAREST );
+    }
+
+    MONITORINFO result;
+    memset( &result, 0, sizeof(result) );
+    result.cbSize = sizeof(result);
+
+    GetMonitorInfoW( monitor, &result );
+    return result;
+}
+HWND win32_get_focused_window(void) {
+    HWND focused = GetForegroundWindow();
+    DWORD pid;
+    GetWindowThreadProcessId( focused, &pid );
+    if( pid != GetCurrentProcessId() ) {
+        return NULL;
+    }
+    return focused;
 }
 
-#undef WIN32_MEDIA_ERROR_BUFFER_PREFIX
-#undef WIN32_MEDIA_ERROR_BUFFER_SUFFIX
-#undef WIN32_MEDIA_ERROR_BUFFER_CAP
+void win32_error_message_full(
+    DWORD error_code, m_uint32 message_len, const char* message
+) {
+    unused( error_code, message_len, message );
+#if defined(MEDIA_ENABLE_LOGGING)
+    if( error_code == ERROR_SUCCESS ) {
+        return;
+    }
 
+    #define prefix "win32: "
+
+    m_uint32 buffer_size = message_len + sizeof(prefix) + 256 + 8;
+    m_uint32 buffer_len  = 0;
+
+    char* buffer = HeapAlloc( GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size );
+    memcpy( buffer, prefix, sizeof(prefix) );
+    buffer_len += sizeof(prefix) - 1;
+
+    memcpy( buffer + buffer_len, message, message_len );
+    buffer_len += message_len;
+
+    buffer[buffer_len++] = ' ';
+    buffer[buffer_len++] = '"';
+
+    int format_len = FormatMessageA(
+        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        0, error_code, 0, buffer + buffer_len, buffer_size - buffer_len, 0 );
+
+    buffer_len += format_len - 2;
+    buffer[buffer_len++] = '"';
+
+    media_log( MEDIA_LOGGING_LEVEL_ERROR, buffer_len, buffer );
+
+    HeapFree( GetProcessHeap(), 0, buffer );
+    #undef prefix
+#endif /* MEDIA_ENABLE_LOGGING */
+}
+
+#undef def
 #endif /* Platform Windows */
-

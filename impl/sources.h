@@ -1,25 +1,20 @@
-#if !defined(MEDIA_IMPL_SOURCES_H)
-#define MEDIA_IMPL_SOURCES_H
 /**
- * @file    sources.h
- * @brief   Header that includes all required sources.
- * @warning Only include if compiling in C.
- * @author  Alicia Amarilla (smushyaa@gmail.com)
- * @date    March 13, 2024
+ * @file   sources.h
+ * @brief  Media lib sources.
+ * @author Alicia Amarilla (smushyaa@gmail.com)
+ * @date   August 10, 2024
 */
-#include "core/defines.h"
+#include "media/defines.h"
 
+#include "impl/cstdlib.c"
 #include "impl/lib.c"
+#include "impl/platform_sharedmain.c"
 
-#if defined(CORE_PLATFORM_WINDOWS)
-    #include "impl/win32/audio.c"
+#if defined(MEDIA_PLATFORM_WINDOWS)
     #include "impl/win32/common.c"
-    #include "impl/win32/gamepad.c"
+    #include "impl/win32/prompt.c"
+    #include "impl/win32/surface.c"
     #include "impl/win32/input.c"
     #include "impl/win32/opengl.c"
-    #include "impl/win32/surface.c"
+    #include "impl/win32/audio.c"
 #endif
-
-#include "corelib/impl/platform_dllmain.c"
-
-#endif /* header guard */

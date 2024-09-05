@@ -2,99 +2,77 @@
 #define MEDIA_IMPL_WIN32_INPUT_H
 /**
  * @file   input.h
- * @brief  Input handling for win32.
+ * @brief  Media Windows Input.
  * @author Alicia Amarilla (smushyaa@gmail.com)
- * @date   April 21, 2024
+ * @date   August 13, 2024
 */
-#include "core/defines.h"
-
-#if defined(CORE_PLATFORM_WINDOWS)
+#include "media/defines.h"
+#if defined(MEDIA_PLATFORM_WINDOWS)
 #include "media/input.h"
-#include "core/collections.h"
+#include "impl/win32/common.h"
 
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
-
-struct Win32InputState {
-    b8               active_gamepads[INPUT_GAMEPAD_COUNT];
-    u16              gamepad_rumble[INPUT_GAMEPAD_COUNT][2];
-    InputKeymod      keymod;
-    b8               keys[packed_bool_memory_requirement(INPUT_KEYCODE_COUNT)];
-    HWND             active;
-    HWND             msg_wnd;
-    WNDCLASSEXA      msg_wnd_class;
-    BYTE             keys_vk[256];
-    i32 abs_x, abs_y;
-    i32 del_x, del_y;
-    InputMouseButton mb;
-    InputGamepadState gp[INPUT_GAMEPAD_COUNT];
+struct Win32Input {
+    KeyboardState kb;
+    m_int32       mb_x, mb_y, mb_dx, mb_dy;
+    m_uint16      rumble[GAMEPAD_MAX_COUNT][2];
+    m_bool32      gp_connected[GAMEPAD_MAX_COUNT];
+    GamepadState  gp[GAMEPAD_MAX_COUNT];
+    HWND          hwnd;
+    HANDLE        thread;
+    volatile long thread_exit;
 };
-extern volatile struct Win32InputState* global_media_win32_input_state;
-
 struct Win32KeyWParam {
-#if defined(CORE_ARCH_64_BIT)
-    u32 ___padding;
+    m_uint16 keycode;
+    m_bool16 is_down;
+#if defined(MEDIA_ARCH_64_BIT)
+    m_uint32 __padding;
 #endif
-    u16 keycode;
-    b16 is_down;
 };
-#define win32_make_key_wparam( _keycode, _is_down )\
-    rcast( WPARAM, (&(struct Win32KeyWParam){ .keycode=_keycode, .is_down=_is_down }) )
-#define win32_get_key_wparam( wparam ) rcast( struct Win32KeyWParam, &(wparam) )
-
-struct Win32TextWParam {
-#if defined(CORE_ARCH_64_BIT)
-    u32 ___padding;
-#endif
-    u16 vk;
-    u16 scan;
-};
-#define win32_make_text_wparam( _vk, _scan )\
-    rcast( WPARAM, (&(struct Win32TextWParam){ .vk=_vk, .scan=_scan }) )
-#define win32_get_text_wparam( wparam ) rcast( struct Win32TextWParam, &(wparam) )
-#define win32_make_text_lparam( keyboard_state ) ((LPARAM)(keyboard_state))
-#define win32_get_text_lparam( lparam ) ((const BYTE*)(lparam))
-
 struct Win32MousePositionParam {
-#if defined(CORE_ARCH_64_BIT)
-    u32 ___padding;
+    m_int32 v;
+#if defined(MEDIA_ARCH_64_BIT)
+    m_uint32 __padding;
 #endif
-    i32 v;
 };
-#define win32_make_mouse_pos_wparam( x )\
-    rcast( WPARAM, (&(struct Win32MousePositionParam){ .v=x }) )
-#define win32_make_mouse_pos_lparam( y )\
-    rcast( LPARAM, (&(struct Win32MousePositionParam){ .v=y }) )
-#define win32_get_mouse_pos( param )\
-    rcast( struct Win32MousePositionParam, &(param) )
-
 struct Win32MouseButtonWParam {
-#if defined(CORE_ARCH_64_BIT)
-    u32 ___padding;
+    m_uint8 state;
+    m_uint8 delta;
+    m_int8  scroll;
+    m_bool8 is_scroll_horizontal;
+#if defined(MEDIA_ARCH_64_BIT)
+    m_uint32 __padding;
 #endif
-    u8 state;
-    u8 delta;
-    i8 scroll;
-    u8 scroll_hor;
 };
-#define win32_make_mouse_button_wparam( _state, _delta, _scroll, _scroll_hor )\
-    rcast( WPARAM, (&(struct Win32MouseButtonWParam){\
-        .state=_state, .delta=_delta, .scroll=_scroll, .scroll_hor=_scroll_hor }) )
-#define win32_get_mouse_button_wparam( wparam )\
-    rcast( struct Win32MouseButtonWParam, &(wparam) )
 
-#define WM_INPUT_KEYBOARD                (WM_USER + 1)
-#define WM_INPUT_KEYBOARD_TEXT           (WM_USER + 2)
-#define WM_INPUT_MOUSE_POSITION          (WM_USER + 3)
-#define WM_INPUT_MOUSE_POSITION_RELATIVE (WM_USER + 4)
-#define WM_INPUT_MOUSE_BUTTON            (WM_USER + 5)
+#define WM_CUSTOM_KEYBOARD  (WM_USER + 1)
+#define WM_CUSTOM_MOUSE_POS (WM_USER + 2)
+#define WM_CUSTOM_MOUSE_DEL (WM_USER + 3)
+#define WM_CUSTOM_MOUSE_BTN (WM_USER + 4)
 
-#define WIN32_MESSAGE_WINDOW_RESULT_PENDING  (0)
-#define WIN32_MESSAGE_WINDOW_RESULT_SUCCESS  (1)
-#define WIN32_MESSAGE_WINDOW_RESULT_ERROR    (2)
-#define WIN32_MESSAGE_WINDOW_RESULT_FINISHED (3)
+#define win32_key_to_wparam( kc, down )\
+    (*(WPARAM*)(&(struct Win32KeyWParam){.keycode=kc,.is_down=down}))
+#define win32_key_from_wparam( wparam )\
+    (*(struct Win32KeyWParam*)(&(wparam)))
+
+#define win32_mouse_x_to_wparam( x )\
+    (*(WPARAM*)(&(struct Win32MousePositionParam){.v=x}))
+#define win32_mouse_x_from_wparam( wparam )\
+    (*(struct Win32MousePositionParam*)&(wparam))
+#define win32_mouse_y_to_lparam( y )\
+    (*(WPARAM*)(&(struct Win32MousePositionParam){.v=y}))
+#define win32_mouse_y_from_lparam( wparam )\
+    (*(struct Win32MousePositionParam*)&(wparam))
+
+#define win32_mouse_button_to_wparam( _state, _delta, _scroll, _scroll_hor )\
+    (*(WPARAM*)(&(struct Win32MouseButtonWParam){\
+        .state=_state,.delta=_delta,\
+        .scroll=_scroll,.is_scroll_horizontal=_scroll_hor}))
+#define win32_mouse_button_from_wparam( wparam )\
+    (*(struct Win32MouseButtonWParam*)(&(wparam)))
+
+struct Win32Input* win32_input(void);
+DWORD        keyboard_code_to_vk( KeyboardCode code );
+KeyboardCode vk_to_keyboard_code( DWORD vk );
 
 #endif /* Platform Windows */
-
 #endif /* header guard */

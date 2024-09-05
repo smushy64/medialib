@@ -6,82 +6,97 @@
  * @author Alicia Amarilla (smushyaa@gmail.com)
  * @date   March 13, 2024
 */
-#include "core/types.h"
-#include "media/attributes.h"
-#include "core/macros.h"
-#include "core/lib.h"
+#include "media/defines.h"
+#include "media/types.h"
+
+/// @brief Logging levels for Media library.
+typedef enum MediaLoggingLevel {
+    /// @brief Disable logging. This is never passed into logging callback.
+    MEDIA_LOGGING_LEVEL_NONE,
+    /// @brief Enable only error log messages.
+    MEDIA_LOGGING_LEVEL_ERROR,
+    /// @brief Enable error and warning log messages.
+    MEDIA_LOGGING_LEVEL_WARN,
+} MediaLoggingLevel;
+
+/// @brief Function prototype for logging callback.
+/// @param     level   Logging level of message.
+/// @param     len     Length of message string.
+/// @param[in] message Pointer to start of log message.
+/// @param[in] params  Pointer to user parameters.
+typedef void MediaLoggingCallbackFN(
+    MediaLoggingLevel level, m_uint32 len, const char* message, void* params );
 
 /// @brief Create a 32-bit unsigned integer that encodes a version of medialib.
-/// @param major (u16) Major version.
-/// @param minor (u8) Minor version.
-/// @param patch (u8) Patch version.
+/// @param major (m_uint16) Major version.
+/// @param minor (m_uint8) Minor version.
+/// @param patch (m_uint8) Patch version.
 /// @return Version encoded as a 32-bit unsigned integer.
-#define media_create_version( major, minor, patch ) core_create_version( major, minor, patch )
+#define media_lib_create_version( major, minor, patch )\
+   ((m_uint32)((major) << 16u | (minor) << 8u | (patch)))
 /// @brief Extract major version from a medialib version integer.
-/// @param version (u32) Medialib version encoded as an unsigned 32-bit integer.
+/// @param version (m_uint32) Medialib version encoded as an unsigned 32-bit integer.
 /// @return Major version.
-#define media_get_major( version ) core_get_major( version )
+#define media_lib_major( version )\
+   ((m_uint16)(((version) & 0xFFFF0000u) >> 16u))
 /// @brief Extract minor version from a medialib version integer.
-/// @param version (u32) Medialib version encoded as an unsigned 32-bit integer.
+/// @param version (m_uint32) Medialib version encoded as an unsigned 32-bit integer.
 /// @return Minor version.
-#define media_get_minor( version ) core_get_minor( version )
+#define media_lib_minor( version )\
+   ((m_uint8)(((version) & 0x0000FF00u) >> 8u))
 /// @brief Extract patch version from a medialib version integer.
-/// @param version (u32) Medialib version encoded as an unsigned 32-bit integer.
+/// @param version (m_uint32) Medialib version encoded as an unsigned 32-bit integer.
 /// @return Patch version.
-#define media_get_patch( version ) core_get_patch( version )
+#define media_lib_patch( version )\
+   ((m_uint8)((version) & 0x000000FFu))
 
-/// @brief Initialize media library.
-/// @warning Must be called before other library functions.
-/// @param     log_level (optional) Set logging level.
-/// @param     log_callback (optional) Set callback for logging functions.
-/// @param[in] log_callback_params (optional) Set log callback params.
-/// @return True if initialization was successful.
-attr_media_api b32 media_initialize(
-    CoreLoggingLevel log_level,
-    CoreLoggingCallbackFN* log_callback,
-    void* log_callback_params );
+/// @brief Query memory requirement for media library buffer.
+/// @return Number of bytes required to initialize media library.
+attr_media_api m_uintptr media_lib_query_memory_requirement(void);
+/// @brief Initialize media library. Must be called before other library functions.
+/// @param     log_level               Logging level. Only relevant when media library is compiled with logging enabled.
+/// @param[in] opt_log_callback        (optional) Pointer to logging callback function.
+/// @param[in] opt_log_callback_params (optional) Pointer to logging callback user parameters.
+/// @param[in] buffer                  Pointer to buffer allocated for library. Must be large enough to hold result from media_lib_query_memory_requirement().
+/// @return
+///     - true  : Media library was successfully initialized.
+///     - false : Failed to initialize media library.
+attr_media_api m_bool32 media_lib_initialize(
+    MediaLoggingLevel       log_level,
+    MediaLoggingCallbackFN* opt_log_callback,
+    void*                   opt_log_callback_params,
+    void*                   buffer );
 /// @brief Shutdown media library.
-/// @warning Must be called before program exit.
-attr_media_api void media_shutdown(void);
+/// @details
+/// Buffer passed into media_lib_initialize() can be freed after calling this function.
+/// @warning Do not call any media library functions after this function!
+attr_media_api void media_lib_shutdown(void);
 
-/// @brief Get version of media lib.
-///
-/// High short:           Major version.
-/// Low short, high byte: Minor version.
-/// Low short, low byte:  Patch version.
-///
-/// Use #media_get_major(), #media_get_minor() and #media_get_patch()
-/// to extract major, minor and patch version numbers.
-/// @return Version integer.
-attr_media_api u32 media_version(void);
-/// @brief Get version of media lib as a string.
-/// @param[out] opt_out_len (optional) Length of version string.
-/// @return Version string.
-attr_media_api const char* media_version_string( usize* opt_out_len );
-/// @brief Get string that describes how library was built.
-/// @param[out] opt_out_len (optional) Length of description string.
-/// @return Null-terminated UTF-8 description string.
-attr_media_api const char* media_build_description( usize* opt_out_len );
-/// @brief Get string that describes command line used to build library.
-/// @param[out] opt_out_len (optional) Length of command line string.
-/// @return Null-terminated UTF-8 command line string.
-attr_media_api const char* media_command_line( usize* opt_out_len );
-/// @brief Set logging level.
-///
-/// If logging level is set to NONE, disables logging.
-/// @note Logging can only be enabled if library is compiled with
-/// MEDIA_ENABLE_LOGGING defined.
-/// @param level Enum defining which logging levels are valid.
-attr_media_api void media_set_logging_level( CoreLoggingLevel level );
-/// @brief Query current logging level.
+/// @brief Query version of media library.
+/// @return Bitpacked version of media library.
+/// Use media_lib_major(), media_lib_minor() and media_lib_patch() to extract version numbers.
+attr_media_api m_uint32 media_lib_query_version(void);
+/// @brief Query command line arguments used to compile media library.
+/// @param[out] opt_out_len (optional) Pointer to write length of command line string to.
+/// @return Pointer to start of command line arguments.
+attr_media_api const char* media_lib_query_command_line( m_uint32* opt_out_len );
+/// @brief Set logging level for media library. Does nothing if library was compiled without logging support.
+/// @note This function is not thread safe.
+/// @param level Logging level to set.
+attr_media_api void media_lib_set_logging_level( MediaLoggingLevel level );
+/// @brief Query logging level for media library.
 /// @return Logging level.
-attr_media_api CoreLoggingLevel media_query_logging_level(void);
-/// @brief Set callback for receiving log messages.
-/// @param[in] callback Function for receiving log messages.
-/// @param[in] params Additional parameters for callback.
-attr_media_api void media_set_logging_callback(
-    CoreLoggingCallbackFN* callback, void* params );
-/// @brief Clear logging callback.
-attr_media_api void media_clear_logging_callback(void);
+attr_media_api MediaLoggingLevel media_lib_query_logging_level(void);
+/// @brief Set logging callback for media library. Does nothing if library was compiled without logging support.
+/// @note This function is not thread safe.
+/// @param[in] callback Pointer to callback function.
+/// @param[in] params   Pointer to callback user parameters.
+attr_media_api void media_lib_set_logging_callback(
+    MediaLoggingCallbackFN* callback, void* params );
+/// @brief Clear logging callback for media library. Does nothing if library was compiled without logging support.
+/// @note This function is not thread safe.
+attr_header void media_lib_clear_logging_callback(void) {
+    media_lib_set_logging_callback( 0, 0 );
+}
 
 #endif /* header guard */

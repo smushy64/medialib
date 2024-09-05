@@ -7,517 +7,418 @@
  * @date   March 20, 2024
 */
 #include "media/types.h"
-#include "media/attributes.h"
-#include "core/collections.h"
 
 /// @brief Key modifiers bitfield.
-typedef enum InputKeymod : u16 {
+typedef enum KeyboardMod : m_uint8 {
     /// @brief Left/right shift key is down.
-    INPUT_KEYMOD_SHIFT  = (1 << 0),
+    KBMOD_SHIFT  = (1 << 0),
     /// @brief Left/right control key is down.
-    INPUT_KEYMOD_CTRL   = (1 << 1),
+    KBMOD_CTRL   = (1 << 1),
     /// @brief Left/right alt key is down.
-    INPUT_KEYMOD_ALT    = (1 << 2),
+    KBMOD_ALT    = (1 << 2),
     /// @brief Capslock is on.
-    INPUT_KEYMOD_CAPSLK = (1 << 3),
+    KBMOD_CAPSLK = (1 << 3),
     /// @brief Scroll lock is on.
-    INPUT_KEYMOD_SCRLK  = (1 << 4),
+    KBMOD_SCRLK  = (1 << 4),
     /// @brief Numlock is on.
-    INPUT_KEYMOD_NUMLK  = (1 << 5),
-} InputKeymod;
+    KBMOD_NUMLK  = (1 << 5),
+} KeyboardMod;
 /// @brief Key code constants.
 /// @note Key code names correspond to the appropriate key for a
 /// US QWERTY keyboard. On other keyboard layouts, they may map to
 /// a different key name but keep the same relative layout.
 /// As an example: WASD in QWERTY maps to ZQSD in AZERTY.
-typedef enum InputKeycode : u16 {
+typedef enum KeyboardCode : m_uint8 {
     /// @brief Unknown key.
-    INPUT_KEYCODE_UNKNOWN,
+    KB_UNKNOWN,
 
     /// @brief Backspace key.
-    INPUT_KEYCODE_BACKSPACE,
+    KB_BACKSPACE,
     /// @brief Tab key.
-    INPUT_KEYCODE_TAB,
+    KB_TAB,
 
     /// @brief Enter key.
-    INPUT_KEYCODE_ENTER,
+    KB_ENTER,
 
     /// @brief Left side Shift key.
-    INPUT_KEYCODE_SHIFT_LEFT,
+    KB_SHIFT_LEFT,
     /// @brief Left side Control key.
-    INPUT_KEYCODE_CONTROL_LEFT,
+    KB_CONTROL_LEFT,
     /// @brief Left side Alt key.
-    INPUT_KEYCODE_ALT_LEFT,
+    KB_ALT_LEFT,
     /// @brief Pause key.
-    INPUT_KEYCODE_PAUSE,
+    KB_PAUSE,
     /// @brief Capslock key.
-    INPUT_KEYCODE_CAPSLOCK,
+    KB_CAPSLOCK,
 
     /// @brief Escape key.
-    INPUT_KEYCODE_ESCAPE,
+    KB_ESCAPE,
 
     /// @brief Space key.
-    INPUT_KEYCODE_SPACE,
+    KB_SPACE,
     /// @brief Page Up key.
-    INPUT_KEYCODE_PAGE_UP,
+    KB_PAGE_UP,
     /// @brief Page Down key.
-    INPUT_KEYCODE_PAGE_DOWN,
+    KB_PAGE_DOWN,
     /// @brief End key.
-    INPUT_KEYCODE_END,
+    KB_END,
     /// @brief Home key.
-    INPUT_KEYCODE_HOME,
+    KB_HOME,
     /// @brief Left arrow key.
-    INPUT_KEYCODE_ARROW_LEFT,
+    KB_ARROW_LEFT,
     /// @brief Up arrow key.
-    INPUT_KEYCODE_ARROW_UP,
+    KB_ARROW_UP,
     /// @brief Right arrow key.
-    INPUT_KEYCODE_ARROW_RIGHT,
+    KB_ARROW_RIGHT,
     /// @brief Down arrow key.
-    INPUT_KEYCODE_ARROW_DOWN,
+    KB_ARROW_DOWN,
 
     /// @brief Print Screen key.
-    INPUT_KEYCODE_PRINT_SCREEN,
+    KB_PRINT_SCREEN,
     /// @brief Insert key.
-    INPUT_KEYCODE_INSERT,
+    KB_INSERT,
     /// @brief Delete key.
-    INPUT_KEYCODE_DELETE,
+    KB_DELETE,
 
     /// @brief Top number row 0 key.
-    INPUT_KEYCODE_0,
+    KB_0,
     /// @brief Top number row 1 key.
-    INPUT_KEYCODE_1,
+    KB_1,
     /// @brief Top number row 2 key.
-    INPUT_KEYCODE_2,
+    KB_2,
     /// @brief Top number row 3 key.
-    INPUT_KEYCODE_3,
+    KB_3,
     /// @brief Top number row 4 key.
-    INPUT_KEYCODE_4,
+    KB_4,
     /// @brief Top number row 5 key.
-    INPUT_KEYCODE_5,
+    KB_5,
     /// @brief Top number row 6 key.
-    INPUT_KEYCODE_6,
+    KB_6,
     /// @brief Top number row 7 key.
-    INPUT_KEYCODE_7,
+    KB_7,
     /// @brief Top number row 8 key.
-    INPUT_KEYCODE_8,
+    KB_8,
     /// @brief Top number row 9 key.
-    INPUT_KEYCODE_9,
+    KB_9,
 
     /// @brief A key.
-    INPUT_KEYCODE_A,
+    KB_A,
     /// @brief B key.
-    INPUT_KEYCODE_B,
+    KB_B,
     /// @brief C key.
-    INPUT_KEYCODE_C,
+    KB_C,
     /// @brief D key.
-    INPUT_KEYCODE_D,
+    KB_D,
     /// @brief E key.
-    INPUT_KEYCODE_E,
+    KB_E,
     /// @brief F key.
-    INPUT_KEYCODE_F,
+    KB_F,
     /// @brief G key.
-    INPUT_KEYCODE_G,
+    KB_G,
     /// @brief H key.
-    INPUT_KEYCODE_H,
+    KB_H,
     /// @brief I key.
-    INPUT_KEYCODE_I,
+    KB_I,
     /// @brief J key.
-    INPUT_KEYCODE_J,
+    KB_J,
     /// @brief K key.
-    INPUT_KEYCODE_K,
+    KB_K,
     /// @brief L key.
-    INPUT_KEYCODE_L,
+    KB_L,
     /// @brief M key.
-    INPUT_KEYCODE_M,
+    KB_M,
     /// @brief N key.
-    INPUT_KEYCODE_N,
+    KB_N,
     /// @brief O key.
-    INPUT_KEYCODE_O,
+    KB_O,
     /// @brief P key.
-    INPUT_KEYCODE_P,
+    KB_P,
     /// @brief Q key.
-    INPUT_KEYCODE_Q,
+    KB_Q,
     /// @brief R key.
-    INPUT_KEYCODE_R,
+    KB_R,
     /// @brief S key.
-    INPUT_KEYCODE_S,
+    KB_S,
     /// @brief T key.
-    INPUT_KEYCODE_T,
+    KB_T,
     /// @brief U key.
-    INPUT_KEYCODE_U,
+    KB_U,
     /// @brief V key.
-    INPUT_KEYCODE_V,
+    KB_V,
     /// @brief W key.
-    INPUT_KEYCODE_W,
+    KB_W,
     /// @brief X key.
-    INPUT_KEYCODE_X,
+    KB_X,
     /// @brief Y key.
-    INPUT_KEYCODE_Y,
+    KB_Y,
     /// @brief Z key.
-    INPUT_KEYCODE_Z,
+    KB_Z,
     /// @brief Left side Super key.
     /// @note On windows this is the @c Windows key.
-    INPUT_KEYCODE_SUPER_LEFT,
+    KB_SUPER_LEFT,
     /// @brief Right side Super key.
     /// @note On windows this is the @c Windows key.
-    INPUT_KEYCODE_SUPER_RIGHT,
+    KB_SUPER_RIGHT,
 
     /// @brief Numpad 0 key.
-    INPUT_KEYCODE_PAD_0,
+    KB_PAD_0,
     /// @brief Numpad 1 key.
-    INPUT_KEYCODE_PAD_1,
+    KB_PAD_1,
     /// @brief Numpad 2 key.
-    INPUT_KEYCODE_PAD_2,
+    KB_PAD_2,
     /// @brief Numpad 3 key.
-    INPUT_KEYCODE_PAD_3,
+    KB_PAD_3,
     /// @brief Numpad 4 key.
-    INPUT_KEYCODE_PAD_4,
+    KB_PAD_4,
     /// @brief Numpad 5 key.
-    INPUT_KEYCODE_PAD_5,
+    KB_PAD_5,
     /// @brief Numpad 6 key.
-    INPUT_KEYCODE_PAD_6,
+    KB_PAD_6,
     /// @brief Numpad 7 key.
-    INPUT_KEYCODE_PAD_7,
+    KB_PAD_7,
     /// @brief Numpad 8 key.
-    INPUT_KEYCODE_PAD_8,
+    KB_PAD_8,
     /// @brief Numpad 9 key.
-    INPUT_KEYCODE_PAD_9,
+    KB_PAD_9,
+
+    /// @brief Numpad add key.
+    KB_PAD_ADD,
+    /// @brief Numpad multiply key.
+    KB_PAD_MULTIPLY,
+    /// @brief Numpad subtract key.
+    KB_PAD_SUBTRACT,
+    /// @brief Numpad divide key.
+    KB_PAD_DIVIDE,
+    /// @brief Numpad dot key.
+    KB_PAD_DOT,
 
     /// @brief F1 key.
-    INPUT_KEYCODE_F1,
+    KB_F1,
     /// @brief F2 key.
-    INPUT_KEYCODE_F2,
+    KB_F2,
     /// @brief F3 key.
-    INPUT_KEYCODE_F3,
+    KB_F3,
     /// @brief F4 key.
-    INPUT_KEYCODE_F4,
+    KB_F4,
     /// @brief F5 key.
-    INPUT_KEYCODE_F5,
+    KB_F5,
     /// @brief F6 key.
-    INPUT_KEYCODE_F6,
+    KB_F6,
     /// @brief F7 key.
-    INPUT_KEYCODE_F7,
+    KB_F7,
     /// @brief F8 key.
-    INPUT_KEYCODE_F8,
+    KB_F8,
     /// @brief F9 key.
-    INPUT_KEYCODE_F9,
+    KB_F9,
     /// @brief F10 key.
-    INPUT_KEYCODE_F10,
+    KB_F10,
     /// @brief F11 key.
-    INPUT_KEYCODE_F11,
+    KB_F11,
     /// @brief F12 key.
-    INPUT_KEYCODE_F12,
+    KB_F12,
     /// @brief F13 key.
-    INPUT_KEYCODE_F13,
+    KB_F13,
     /// @brief F14 key.
-    INPUT_KEYCODE_F14,
+    KB_F14,
     /// @brief F15 key.
-    INPUT_KEYCODE_F15,
+    KB_F15,
     /// @brief F16 key.
-    INPUT_KEYCODE_F16,
+    KB_F16,
     /// @brief F17 key.
-    INPUT_KEYCODE_F17,
+    KB_F17,
     /// @brief F18 key.
-    INPUT_KEYCODE_F18,
+    KB_F18,
     /// @brief F19 key.
-    INPUT_KEYCODE_F19,
+    KB_F19,
     /// @brief F20 key.
-    INPUT_KEYCODE_F20,
+    KB_F20,
     /// @brief F21 key.
-    INPUT_KEYCODE_F21,
+    KB_F21,
     /// @brief F22 key.
-    INPUT_KEYCODE_F22,
+    KB_F22,
     /// @brief F23 key.
-    INPUT_KEYCODE_F23,
+    KB_F23,
     /// @brief F24 key.
-    INPUT_KEYCODE_F24,
+    KB_F24,
 
     /// @brief Num lock key.
-    INPUT_KEYCODE_NUM_LOCK,
+    KB_NUM_LOCK,
     /// @brief Scroll lock key.
-    INPUT_KEYCODE_SCROLL_LOCK,
+    KB_SCROLL_LOCK,
 
     /// @brief Semicolon key.
-    INPUT_KEYCODE_SEMICOLON,
+    KB_SEMICOLON,
     /// @brief Equals key.
-    INPUT_KEYCODE_EQUALS,
+    KB_EQUALS,
     /// @brief Comma key.
-    INPUT_KEYCODE_COMMA,
+    KB_COMMA,
     /// @brief Minus key.
-    INPUT_KEYCODE_MINUS,
+    KB_MINUS,
     /// @brief Period key.
-    INPUT_KEYCODE_PERIOD,
+    KB_PERIOD,
     /// @brief Forward slash key.
-    INPUT_KEYCODE_SLASH,
+    KB_SLASH,
     /// @brief Tick (Grave) key.
-    INPUT_KEYCODE_BACKTICK,
+    KB_BACKTICK,
 
     /// @brief Left bracket key.
-    INPUT_KEYCODE_BRACKET_LEFT,
+    KB_BRACKET_LEFT,
     /// @brief Backslash key.
-    INPUT_KEYCODE_BACKSLASH,
+    KB_BACKSLASH,
     /// @brief Right bracket key.
-    INPUT_KEYCODE_BRACKET_RIGHT,
+    KB_BRACKET_RIGHT,
     /// @brief Quote key.
-    INPUT_KEYCODE_QUOTE,
+    KB_QUOTE,
     /// @brief Right side Shift key.
-    INPUT_KEYCODE_SHIFT_RIGHT,
+    KB_SHIFT_RIGHT,
     /// @brief Right side Alt key.
-    INPUT_KEYCODE_ALT_RIGHT,
+    KB_ALT_RIGHT,
     /// @brief Right side Control key.
-    INPUT_KEYCODE_CONTROL_RIGHT,
+    KB_CONTROL_RIGHT,
+
+    /// @brief Right click menu.
+    KB_RIGHT_CLICK_MENU,
 
     /// @brief Number of valid key codes.
-    INPUT_KEYCODE_COUNT,
-} InputKeycode;
-/// @brief Query key modifiers currently pressed.
-/// @return Bitfield containing key modifiers.
-attr_media_api InputKeymod media_keyboard_query_mod(void);
-/// @brief Query key state.
-/// @param key Key to query.
-/// @return True if key is down, false if it's up.
-attr_media_api b32 media_keyboard_query_key( InputKeycode key );
-/// @brief Query state of the entire keyboard.
-/// @param[out] out_keyboard Packed boolean array to copy keyboard state to.
-attr_media_api void media_keyboard_query_keyboard(
-    b8 out_keyboard[packed_bool_memory_requirement(INPUT_KEYCODE_COUNT)] );
+    KB_COUNT = 128,
+} KeyboardCode;
 
-/// @brief Get keycode name as a string.
-/// @param key Keycode to get name of.
-/// @param[out] opt_out_len (optional) Length of string.
-/// @return Readonly string.
-attr_header const char* input_keycode_to_string(
-    InputKeycode key, usize* opt_out_len
+/// @brief Packed boolean structure representing all key states.
+typedef struct KeyboardState {
+    /// @brief Packed boolean array.
+    m_bool8 keys[(KB_COUNT / 8) + ((KB_COUNT % 8) ? 1 : 0)];
+} KeyboardState;
+
+attr_header const char* keyboard_code_to_string(
+    KeyboardCode code, m_uintptr* opt_out_len
 ) {
-    const u32 string_len[] = {
-        sizeof( "UNKNOWN" ) - 1,
-        sizeof( "BACKSPACE" ) - 1,
-        sizeof( "TAB" ) - 1,
-        sizeof( "ENTER" ) - 1,
-        sizeof( "LEFT SHIFT" ) - 1,
-        sizeof( "LEFT CONTROL" ) - 1,
-        sizeof( "LEFT ALT" ) - 1,
-        sizeof( "PAUSE" ) - 1,
-        sizeof( "CAPSLOCK" ) - 1,
-        sizeof( "ESCAPE" ) - 1,
-        sizeof( "SPACE" ) - 1,
-        sizeof( "PAGE UP" ) - 1,
-        sizeof( "PAGE DOWN" ) - 1,
-        sizeof( "END" ) - 1,
-        sizeof( "HOME" ) - 1,
-        sizeof( "LEFT ARROW" ) - 1,
-        sizeof( "UP ARROW" ) - 1,
-        sizeof( "RIGHT ARROW" ) - 1,
-        sizeof( "DOWN ARROW" ) - 1,
-        sizeof( "PRINT SCREEN" ) - 1,
-        sizeof( "INSERT" ) - 1,
-        sizeof( "DELETE" ) - 1,
-        sizeof( "0" ) - 1,
-        sizeof( "1" ) - 1,
-        sizeof( "2" ) - 1,
-        sizeof( "3" ) - 1,
-        sizeof( "4" ) - 1,
-        sizeof( "5" ) - 1,
-        sizeof( "6" ) - 1,
-        sizeof( "7" ) - 1,
-        sizeof( "8" ) - 1,
-        sizeof( "9" ) - 1,
-        sizeof( "A" ) - 1,
-        sizeof( "B" ) - 1,
-        sizeof( "C" ) - 1,
-        sizeof( "D" ) - 1,
-        sizeof( "E" ) - 1,
-        sizeof( "F" ) - 1,
-        sizeof( "G" ) - 1,
-        sizeof( "H" ) - 1,
-        sizeof( "I" ) - 1,
-        sizeof( "J" ) - 1,
-        sizeof( "K" ) - 1,
-        sizeof( "L" ) - 1,
-        sizeof( "M" ) - 1,
-        sizeof( "N" ) - 1,
-        sizeof( "O" ) - 1,
-        sizeof( "P" ) - 1,
-        sizeof( "Q" ) - 1,
-        sizeof( "R" ) - 1,
-        sizeof( "S" ) - 1,
-        sizeof( "T" ) - 1,
-        sizeof( "U" ) - 1,
-        sizeof( "V" ) - 1,
-        sizeof( "W" ) - 1,
-        sizeof( "X" ) - 1,
-        sizeof( "Y" ) - 1,
-        sizeof( "Z" ) - 1,
-        sizeof( "LEFT SUPER" ) - 1,
-        sizeof( "RIGHT SUPER" ) - 1,
-        sizeof( "KEYPAD 0" ) - 1,
-        sizeof( "KEYPAD 1" ) - 1,
-        sizeof( "KEYPAD 2" ) - 1,
-        sizeof( "KEYPAD 3" ) - 1,
-        sizeof( "KEYPAD 4" ) - 1,
-        sizeof( "KEYPAD 5" ) - 1,
-        sizeof( "KEYPAD 6" ) - 1,
-        sizeof( "KEYPAD 7" ) - 1,
-        sizeof( "KEYPAD 8" ) - 1,
-        sizeof( "KEYPAD 9" ) - 1,
-        sizeof( "F1" ) - 1,
-        sizeof( "F2" ) - 1,
-        sizeof( "F3" ) - 1,
-        sizeof( "F4" ) - 1,
-        sizeof( "F5" ) - 1,
-        sizeof( "F6" ) - 1,
-        sizeof( "F7" ) - 1,
-        sizeof( "F8" ) - 1,
-        sizeof( "F9" ) - 1,
-        sizeof( "F10" ) - 1,
-        sizeof( "F11" ) - 1,
-        sizeof( "F12" ) - 1,
-        sizeof( "F13" ) - 1,
-        sizeof( "F14" ) - 1,
-        sizeof( "F15" ) - 1,
-        sizeof( "F16" ) - 1,
-        sizeof( "F17" ) - 1,
-        sizeof( "F18" ) - 1,
-        sizeof( "F19" ) - 1,
-        sizeof( "F20" ) - 1,
-        sizeof( "F21" ) - 1,
-        sizeof( "F22" ) - 1,
-        sizeof( "F23" ) - 1,
-        sizeof( "F24" ) - 1,
-        sizeof( "NUMLOCK" ) - 1,
-        sizeof( "SCROLL LOCK" ) - 1,
-        sizeof( "SEMICOLON" ) - 1,
-        sizeof( "EQUALS" ) - 1,
-        sizeof( "COMMA" ) - 1,
-        sizeof( "MINUS" ) - 1,
-        sizeof( "PERIOD" ) - 1,
-        sizeof( "SLASH" ) - 1,
-        sizeof( "BACKTICK" ) - 1,
-        sizeof( "LEFT BRACKET" ) - 1,
-        sizeof( "BACKSLASH" ) - 1,
-        sizeof( "RIGHT BRACKET" ) - 1,
-        sizeof( "QUOTE" ) - 1,
-        sizeof( "RIGHT SHIFT" ) - 1,
-        sizeof( "RIGHT ALT" ) - 1,
-        sizeof( "RIGHT CONTROL" ) - 1,
-    };
-    const char* strings[] = {
-        "UNKNOWN",
-        "BACKSPACE",
-        "TAB",
-        "ENTER",
-        "LEFT SHIFT",
-        "LEFT CONTROL",
-        "LEFT ALT",
-        "PAUSE",
-        "CAPSLOCK",
-        "ESCAPE",
-        "SPACE",
-        "PAGE UP",
-        "PAGE DOWN",
-        "END",
-        "HOME",
-        "LEFT ARROW",
-        "UP ARROW",
-        "RIGHT ARROW",
-        "DOWN ARROW",
-        "PRINT SCREEN",
-        "INSERT",
-        "DELETE",
-        "0",
-        "1",
-        "2",
-        "3",
-        "4",
-        "5",
-        "6",
-        "7",
-        "8",
-        "9",
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "G",
-        "H",
-        "I",
-        "J",
-        "K",
-        "L",
-        "M",
-        "N",
-        "O",
-        "P",
-        "Q",
-        "R",
-        "S",
-        "T",
-        "U",
-        "V",
-        "W",
-        "X",
-        "Y",
-        "Z",
-        "LEFT SUPER",
-        "RIGHT SUPER",
-        "KEYPAD 0",
-        "KEYPAD 1",
-        "KEYPAD 2",
-        "KEYPAD 3",
-        "KEYPAD 4",
-        "KEYPAD 5",
-        "KEYPAD 6",
-        "KEYPAD 7",
-        "KEYPAD 8",
-        "KEYPAD 9",
-        "F1",
-        "F2",
-        "F3",
-        "F4",
-        "F5",
-        "F6",
-        "F7",
-        "F8",
-        "F9",
-        "F10",
-        "F11",
-        "F12",
-        "F13",
-        "F14",
-        "F15",
-        "F16",
-        "F17",
-        "F18",
-        "F19",
-        "F20",
-        "F21",
-        "F22",
-        "F23",
-        "F24",
-        "NUMLOCK",
-        "SCROLL LOCK",
-        "SEMICOLON",
-        "EQUALS",
-        "COMMA",
-        "MINUS",
-        "PERIOD",
-        "SLASH",
-        "BACKTICK",
-        "LEFT BRACKET",
-        "BACKSLASH",
-        "RIGHT BRACKET",
-        "QUOTE",
-        "RIGHT SHIFT",
-        "RIGHT ALT",
-        "RIGHT CONTROL",
-    };
-    u32 index = key >= INPUT_KEYCODE_COUNT ? 0 : key;
-    if( opt_out_len ) {
-        *opt_out_len = string_len[index];
+    #define result( text ) {\
+        if( opt_out_len ) {\
+            *opt_out_len = sizeof(text) - 1;\
+        }\
+    } return text
+
+    switch( code ) {
+        case KB_BACKSPACE     : result("Backspace");
+        case KB_TAB           : result("Tab");
+        case KB_ENTER         : result("Enter");
+        case KB_SHIFT_LEFT    : result("Left Shift");
+        case KB_CONTROL_LEFT  : result("Left Control");
+        case KB_ALT_LEFT      : result("Left Alt");
+        case KB_PAUSE         : result("Pause");
+        case KB_CAPSLOCK      : result("Capslock");
+        case KB_ESCAPE        : result("Escape");
+        case KB_SPACE         : result("Space");
+        case KB_PAGE_UP       : result("Page Up");
+        case KB_PAGE_DOWN     : result("Page Down");
+        case KB_END           : result("End");
+        case KB_HOME          : result("Home");
+        case KB_ARROW_LEFT    : result("Left");
+        case KB_ARROW_UP      : result("Up");
+        case KB_ARROW_RIGHT   : result("Right");
+        case KB_ARROW_DOWN    : result("Down");
+        case KB_PRINT_SCREEN  : result("Print Screen");
+        case KB_INSERT        : result("Insert");
+        case KB_DELETE        : result("Delete");
+        case KB_0             : result("0");
+        case KB_1             : result("1");
+        case KB_2             : result("2");
+        case KB_3             : result("3");
+        case KB_4             : result("4");
+        case KB_5             : result("5");
+        case KB_6             : result("6");
+        case KB_7             : result("7");
+        case KB_8             : result("8");
+        case KB_9             : result("9");
+        case KB_A             : result("A");
+        case KB_B             : result("B");
+        case KB_C             : result("C");
+        case KB_D             : result("D");
+        case KB_E             : result("E");
+        case KB_F             : result("F");
+        case KB_G             : result("G");
+        case KB_H             : result("H");
+        case KB_I             : result("I");
+        case KB_J             : result("J");
+        case KB_K             : result("K");
+        case KB_L             : result("L");
+        case KB_M             : result("M");
+        case KB_N             : result("N");
+        case KB_O             : result("O");
+        case KB_P             : result("P");
+        case KB_Q             : result("Q");
+        case KB_R             : result("R");
+        case KB_S             : result("S");
+        case KB_T             : result("T");
+        case KB_U             : result("U");
+        case KB_V             : result("V");
+        case KB_W             : result("W");
+        case KB_X             : result("X");
+        case KB_Y             : result("Y");
+        case KB_Z             : result("Z");
+        case KB_SUPER_LEFT    : result("Left Super");
+        case KB_SUPER_RIGHT   : result("Right Super");
+        case KB_PAD_0         : result("Keypad 0");
+        case KB_PAD_1         : result("Keypad 1");
+        case KB_PAD_2         : result("Keypad 2");
+        case KB_PAD_3         : result("Keypad 3");
+        case KB_PAD_4         : result("Keypad 4");
+        case KB_PAD_5         : result("Keypad 5");
+        case KB_PAD_6         : result("Keypad 6");
+        case KB_PAD_7         : result("Keypad 7");
+        case KB_PAD_8         : result("Keypad 8");
+        case KB_PAD_9         : result("Keypad 9");
+        case KB_F1            : result("F1");
+        case KB_F2            : result("F2");
+        case KB_F3            : result("F3");
+        case KB_F4            : result("F4");
+        case KB_F5            : result("F5");
+        case KB_F6            : result("F6");
+        case KB_F7            : result("F7");
+        case KB_F8            : result("F8");
+        case KB_F9            : result("F9");
+        case KB_F10           : result("F10");
+        case KB_F11           : result("F11");
+        case KB_F12           : result("F12");
+        case KB_F13           : result("F13");
+        case KB_F14           : result("F14");
+        case KB_F15           : result("F15");
+        case KB_F16           : result("F16");
+        case KB_F17           : result("F17");
+        case KB_F18           : result("F18");
+        case KB_F19           : result("F19");
+        case KB_F20           : result("F20");
+        case KB_F21           : result("F21");
+        case KB_F22           : result("F22");
+        case KB_F23           : result("F23");
+        case KB_F24           : result("F24");
+        case KB_NUM_LOCK      : result("Number Lock");
+        case KB_SCROLL_LOCK   : result("Scroll Lock");
+        case KB_SEMICOLON     : result("Semicolon");
+        case KB_EQUALS        : result("Equals");
+        case KB_COMMA         : result("Comma");
+        case KB_MINUS         : result("Minus");
+        case KB_PERIOD        : result("Period");
+        case KB_SLASH         : result("Forward Slash");
+        case KB_BACKTICK      : result("Back Tick");
+        case KB_BRACKET_LEFT  : result("Left Bracket");
+        case KB_BACKSLASH     : result("Back Slash");
+        case KB_BRACKET_RIGHT : result("Right Bracket");
+        case KB_QUOTE         : result("Quote");
+        case KB_SHIFT_RIGHT   : result("Right Shift");
+        case KB_ALT_RIGHT     : result("Right Alt");
+        case KB_CONTROL_RIGHT : result("Right Control");
+        case KB_PAD_ADD       : result("Numpad Add");
+        case KB_PAD_MULTIPLY  : result("Numpad Multiply");
+        case KB_PAD_SUBTRACT  : result("Numpad Subtract");
+        case KB_PAD_DIVIDE    : result("Numpad Divide");
+        case KB_PAD_DOT       : result("Numpad Dot");
+        case KB_RIGHT_CLICK_MENU : result("Right Click Menu");
+
+        default: result( "Unknown" );
     }
-    return strings[index];
+
+#undef result
 }
 
 #endif /* header guard */

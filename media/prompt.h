@@ -6,107 +6,106 @@
  * @author Alicia Amarilla (smushyaa@gmail.com)
  * @date   March 14, 2024
 */
-#include "core/string.h"
-#include "core/path.h"
-#include "media/attributes.h"
+#include "media/defines.h"
 #include "media/types.h"
 
 /// @brief Type of message box's message.
-typedef enum MediaMessageBoxType {
+typedef enum PromptMessageType {
     /// @brief Message box delivers information.
-    MEDIA_MESSAGE_BOX_TYPE_INFO,
+    PROMPT_MESSAGE_TYPE_INFO,
     /// @brief Message box delivers warning.
-    MEDIA_MESSAGE_BOX_TYPE_WARN,
+    PROMPT_MESSAGE_TYPE_WARN,
     /// @brief Message box delivers an error.
-    MEDIA_MESSAGE_BOX_TYPE_ERROR,
-} MediaMessageBoxType;
+    PROMPT_MESSAGE_TYPE_ERROR,
+} PromptMessageType;
 /// @brief Options that message box should display.
-typedef enum MediaMessageBoxOptions {
+typedef enum PromptMessageOptions {
     /// @brief Message box OK button.
-    MEDIA_MESSAGE_BOX_OPTIONS_OK,
+    PROMPT_MESSAGE_OPTIONS_OK,
     /// @brief Message box OK and CANCEL buttons.
-    MEDIA_MESSAGE_BOX_OPTIONS_OK_CANCEL,
+    PROMPT_MESSAGE_OPTIONS_OK_CANCEL,
     /// @brief Message box YES and NO buttons.
-    MEDIA_MESSAGE_BOX_OPTIONS_YES_NO,
-} MediaMessageBoxOptions;
+    PROMPT_MESSAGE_OPTIONS_YES_NO,
+} PromptMessageOptions;
 /// @brief Result from message box.
-typedef enum MediaMessageBoxResult {
+typedef enum PromptMessageResult {
     /// @brief An unknown error occurred when creating message box.
-    MEDIA_MESSAGE_BOX_RESULT_ERROR,
+    PROMPT_MESSAGE_ERROR_UNKNOWN,
     /// @brief OK button pressed.
-    MEDIA_MESSAGE_BOX_RESULT_OK_PRESSED,
+    PROMPT_MESSAGE_RESULT_OK_PRESSED,
     /// @brief CANCEL button pressed.
-    MEDIA_MESSAGE_BOX_RESULT_CANCEL_PRESSED,
+    PROMPT_MESSAGE_RESULT_CANCEL_PRESSED,
     /// @brief YES button pressed.
-    MEDIA_MESSAGE_BOX_RESULT_YES_PRESSED,
+    PROMPT_MESSAGE_RESULT_YES_PRESSED,
     /// @brief NO button pressed.
-    MEDIA_MESSAGE_BOX_RESULT_NO_PRESSED,
-} MediaMessageBoxResult;
-/// @brief Result from open file prompt.
-typedef enum MediaPromptFileOpenResult {
-    /// @brief No error.
-    MEDIA_PROMPT_FILE_OPEN_RESULT_SUCCESS,
-    /// @brief User did not select a file.
-    MEDIA_PROMPT_FILE_OPEN_RESULT_NO_FILE_SELECT,
-    /// @brief Ran out of memory when trying to open prompt.
-    MEDIA_PROMPT_FILE_OPEN_RESULT_ERROR_OUT_OF_MEMORY,
-    /// @brief Opening prompt resulted in an error. Check logs for more info.
-    MEDIA_PROMPT_FILE_OPEN_RESULT_ERROR_PROMPT,
-    /// @brief @c out_path was too small.
-    MEDIA_PROMPT_FILE_OPEN_RESULT_ERROR_OUT_PATH_TOO_SMALL,
-} MediaPromptFileOpenResult;
-/// @brief File open/save filter.
-typedef struct MediaPromptFileFilter {
-    /// @brief Name of filter.
-    String name;
-    /// @brief Number of filter patterns.
-    usize len;
-    /// @brief Filter patterns.
-    ///
-    /// Filter patterns are formatted like so:
-    /// <tt>'file name'</tt><tt>.</tt><tt>'extension name'</tt>
-    ///
-    /// <tt>'file name'</tt>      can be any valid file name or wildcard (*).
-    ///
-    /// <tt>'extension name'</tt> can be any extension or wildcard (*).
-    String* patterns;
-} MediaPromptFileFilter;
-/// @brief List of file open/save filters.
-typedef struct MediaPromptFileFilterList {
-    /// @brief Number of filters in list.
-    usize len;
-    /// @brief Pointer to filters.
-    MediaPromptFileFilter* filters;
-} MediaPromptFileFilterList;
-/// @brief Present a message box to user.
-///
-/// This message box blocks the calling thread.
-/// @param[in] opt_parent (optional) Parent of message box surface.
-/// @param title Title of message box.
-/// @param message Message in message box client area.
-/// @param type Type of message box.
-/// @param options Options that message box presents to the user.
-/// @warning @c title and @c message MUST be null-terminated!
-/// @return Error or button that user pressed.
-attr_media_api MediaMessageBoxResult media_message_box_blocking(
-    MediaSurface* opt_parent, String title, String message,
-    MediaMessageBoxType type, MediaMessageBoxOptions options );
-/// @brief Create a file open prompt.
-///
-/// This prompt blocks the calling thread.
-/// @param[in] opt_parent (optional) Parent surface of the prompt.
-/// @param opt_prompt_title (optional) Title of prompt surface.
-/// @param opt_initial_directory (optional) Directory to open prompt in.
-/// @param opt_filters (optional) File filters.
-/// @param[out] out_path Path to file that user opened.
-/// @return Result of prompt.
-/// @see MediaPromptFileFilterList
-/// @see MediaPromptFileOpenResult
-attr_no_discard
-attr_media_api MediaPromptFileOpenResult media_prompt_file_open_blocking(
-    MediaSurface* opt_parent, String opt_prompt_title,
-    Path opt_initial_directory, MediaPromptFileFilterList* opt_filters,
-    PathBuf* out_path );
+    PROMPT_MESSAGE_RESULT_NO_PRESSED,
+} PromptMessageResult;
+/// @brief Result from file open prompt.
+typedef enum PromptFileOpenResult {
+    /// @brief Prompt created successfully and user selected a file.
+    PROMPT_FILE_OPEN_RESULT_SUCCESS,
+    /// @brief Prompt created successfully and user canceled selecting a file.
+    PROMPT_FILE_OPEN_RESULT_CANCELED,
+    /// @brief Failed to parse extension filters.
+    PROMPT_FILE_OPEN_ERROR_PARSE_FILTERS,
+    /// @brief Failed to allocate memory required for prompt.
+    PROMPT_FILE_OPEN_ERROR_OUT_OF_MEMORY,
+    /// @brief Failed to create prompt due to unknown system API error.
+    PROMPT_FILE_OPEN_ERROR_UNKNOWN,
+} PromptFileOpenResult;
 
+/// @brief Present a message box to user.
+/// @details
+/// This prompt blocks the calling thread.
+/// @note This function allocated on Windows.
+/// @param     opt_title_len (optional) Length of title of message prompt.
+/// @param[in] opt_title     (optional) Title of message box.
+/// @param     message_len   Length of message.
+/// @param[in] message       Message in message box client area.
+/// @param     type          Type of message box.
+/// @param     options       Options that message box presents to the user.
+/// @return Error or button that user pressed.
+attr_media_api PromptMessageResult prompt_message(
+    m_uint32 opt_title_len, const char* opt_title,
+    m_uint32 message_len, const char* message,
+    PromptMessageType type, PromptMessageOptions options );
+/// @brief Present a file open prompt to the user.
+/// @details
+/// This prompt only allows for selecting one file.
+/// 
+/// Extension filter formatting:
+///
+/// Filters are separated by a semicolon (;).
+///
+/// Each filter supports * wildcard for matching any number of characters.
+///
+/// Filters can also have an optional display name.
+///
+/// Display name comes before filter and is escaped with a colon (:).
+///
+/// First filter is considered the default filter in prompt.
+///
+/// Last filter does not need a semicolon.
+///
+/// Example:
+/// "All:*.*;Source Files:*.c;Header Files:*.h"
+/// @note This function allocates on Windows.
+/// @param      opt_title_len       (optional) Length of prompt title (in bytes).
+/// @param[in]  opt_title           (optional) Pointer to start of prompt title (UTF-8 encoded).
+/// @param      opt_ext_filters_len (optional) Length of extension filters (in bytes).
+/// @param[in]  opt_ext_filters     (optional) Pointer to start of extension filters. (UTF-8 encoded) See details for more information.
+/// @param      result_buffer_cap   Capacity of result buffer (in bytes).
+/// @param[out] out_result_len      Pointer to write length of result path.
+/// @param[out] out_result_buffer   Pointer to write result path to.
+/// @return Prompt File Open Result.
+/// @see #PromptFileOpenResult
+attr_media_api PromptFileOpenResult prompt_file_open(
+    m_uint32 opt_title_len,
+    const char* opt_title,
+    m_uint32 opt_ext_filters_len,
+    const char* opt_ext_filters,
+    m_uint32 result_buffer_cap,
+    m_uint32* out_result_len,
+    char* out_result_buffer );
 
 #endif /* header guard */

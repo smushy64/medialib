@@ -2,43 +2,40 @@
 #define MEDIA_IMPL_WIN32_SURFACE_H
 /**
  * @file   surface.h
- * @brief  Win32 Surface definition.
+ * @brief  Media Windows Surface.
  * @author Alicia Amarilla (smushyaa@gmail.com)
- * @date   March 27, 2024
+ * @date   August 11, 2024
 */
-#include "impl/win32/common.h" // IWYU pragma: export
-
-#if defined(CORE_PLATFORM_WINDOWS)
+#include "media/defines.h"
+#if defined(MEDIA_PLATFORM_WINDOWS)
+#include "media/types.h"
 #include "media/surface.h"
+#include "impl/win32/common.h" // IWYU pragma: keep
 
-typedef u16 Win32SurfaceState;
-#define WIN32_SURFACE_STATE_IS_HIDDEN     (1 << 0)
-#define WIN32_SURFACE_STATE_IS_FULLSCREEN (1 << 1)
-#define WIN32_SURFACE_STATE_IS_FOCUSED    (1 << 2)
-
-#define WIN32_SURFACE_NAME_CAP (255)
+#define WIN32_SURFACE_TITLE_UCS2_CAP (SURFACE_MAX_TITLE_LEN + 1)
+#define WIN32_SURFACE_TITLE_SIZE (sizeof(wchar_t) * WIN32_SURFACE_TITLE_UCS2_CAP)
 
 struct Win32Surface {
-    HWND  hwnd;
-    HDC   hdc;
-    DWORD dwStyle, dwExStyle;
+    HWND hwnd;
+    HDC  hdc;
 
-    i32 x, y, w, h;
-    Win32SurfaceState state; // u16
-    u16 flags;
+    m_int32 x, y, w, h;
 
     WINDOWPLACEMENT placement;
 
-    MediaSurfaceCallbackFN* callback;
-    void*                   callback_params;
+    CursorType cursor;
+    SurfaceCreateFlags create_flags;
+    SurfaceStateFlags  state;
 
-    MediaCursor cursor;
-    u8   name_len;
-    char name[WIN32_SURFACE_NAME_CAP];
+    SurfaceCallbackFN* callback;
+    void* callback_params;
+
+    m_uint8 title_len;
+    union {
+        wchar_t title_ucs2[WIN32_SURFACE_TITLE_UCS2_CAP];
+        char title_utf8[WIN32_SURFACE_TITLE_SIZE];
+    };
 };
-#define surface_to_win32( in_surface )\
-    struct Win32Surface* surface = (struct Win32Surface*)(in_surface)
 
 #endif /* Platform Windows */
-
 #endif /* header guard */

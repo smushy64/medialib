@@ -1,18 +1,14 @@
 /**
  * @file   opengl.c
- * @brief  Win32 opengl implementation.
+ * @brief  Windows OpenGL.
  * @author Alicia Amarilla (smushyaa@gmail.com)
- * @date   March 27, 2024
+ * @date   August 23, 2024
 */
+#include "media/defines.h"
+
+#if defined(MEDIA_PLATFORM_WINDOWS)
+#include "media/opengl.h"
 #include "impl/win32/common.h"
-
-#if defined(CORE_PLATFORM_WINDOWS)
-#include "core/prelude.h"
-#include "core/sync.h"
-
-#include "media/internal/logging.h"
-#include "media/render.h"
-
 #include "impl/win32/surface.h"
 
 struct Win32OpenGLAttributes {
@@ -34,9 +30,6 @@ struct Win32OpenGLAttributes {
         int attribs[9];
     };
 };
-static_assert(
-    sizeof(MediaOpenGLAttributes) >= sizeof(struct Win32OpenGLAttributes),
-    "MediaOpenGLAttributes is smaller than windows version!" );
 
 #define WGL_CONTEXT_MAJOR_VERSION_ARB             0x2091
 #define WGL_CONTEXT_MINOR_VERSION_ARB             0x2092
@@ -52,41 +45,42 @@ static_assert(
 #define ERROR_INVALID_PROFILE_ARB                 0x2096
 
 #define def( ret, fn, ... )\
-typedef ret fn##FN( __VA_ARGS__ );\
-attr_internal fn##FN* in_##fn = NULL
+    typedef ret fn##FN( __VA_ARGS__ );\
+    fn##FN* in_##fn = NULL
 
-// NOTE(alicia): GDI32 declarations
+// NOTE(alicia): GDI32
 
-def( int, DescribePixelFormat, HDC, int, UINT, LPPIXELFORMATDESCRIPTOR );
+def( int, DescribePixelFormat,
+    HDC hdc, int iPixelFormat, UINT nBytes, LPPIXELFORMATDESCRIPTOR ppfd );
 #define DescribePixelFormat in_DescribePixelFormat
 
-def( int, ChoosePixelFormat, HDC, const PIXELFORMATDESCRIPTOR* );
+def( int, ChoosePixelFormat, HDC hdc, const PIXELFORMATDESCRIPTOR* ppfd );
 #define ChoosePixelFormat in_ChoosePixelFormat
 
-def( BOOL, SetPixelFormat, HDC, int, const PIXELFORMATDESCRIPTOR* );
+def( BOOL, SetPixelFormat, HDC hdc, int format, const PIXELFORMATDESCRIPTOR* ppfd );
 #define SetPixelFormat in_SetPixelFormat
 
-def( BOOL, SwapBuffers, HDC );
+def( BOOL, SwapBuffers, HDC unnamedParam1 );
 #define SwapBuffers in_SwapBuffers
 
-// NOTE(alicia): OPENGL32 declarations
+// NOTE(alicia): OPENGL32
 
-def( HGLRC, wglCreateContext, HDC );
+def( HGLRC, wglCreateContext, HDC hdc );
 #define wglCreateContext in_wglCreateContext
 
-def( BOOL, wglDeleteContext, HGLRC );
+def( BOOL, wglDeleteContext, HGLRC hglrc );
 #define wglDeleteContext in_wglDeleteContext
 
-def( BOOL, wglMakeCurrent, HDC, HGLRC );
+def( BOOL, wglMakeCurrent, HDC hdc, HGLRC hglrc );
 #define wglMakeCurrent in_wglMakeCurrent
 
-def( PROC, wglGetProcAddress, LPCSTR );
+def( PROC, wglGetProcAddress, LPCSTR name );
 #define wglGetProcAddress in_wglGetProcAddress
 
-def( BOOL, wglShareLists, HGLRC, HGLRC );
+def( BOOL, wglShareLists, HGLRC rc1, HGLRC rc2 );
 #define wglShareLists in_wglShareLists
 
-def( BOOL, wglCopyContext, HGLRC, HGLRC, UINT );
+def( BOOL, wglCopyContext, HGLRC dst, HGLRC src, UINT uint );
 #define wglCopyContext in_wglCopyContext
 
 def( HGLRC, wglCreateContextAttribsARB, HDC, HGLRC, const int* );
@@ -95,33 +89,25 @@ def( HGLRC, wglCreateContextAttribsARB, HDC, HGLRC, const int* );
 def( BOOL, wglSwapIntervalEXT, int );
 #define wglSwapIntervalEXT in_wglSwapIntervalEXT
 
-#undef def
-
-attr_media_api b32 media_render_gl_initialize(void) {
-    if( global_win32_state->gl_initialized ) {
-        return true;
-    }
-
-    #define open( name ) do {\
-        if( !global_win32_state->name ) {\
-            global_win32_state->name = LoadLibraryA( #name ".DLL" );\
-            if( !global_win32_state->name ) {\
-                win32_error( "failed to open library " #name "!" );\
-                return false;\
-            }\
-        }\
-    } while(0)
-
-    #define load( mod, name ) do {\
-        name = (name##FN*)GetProcAddress( global_win32_state->mod, #name );\
-        if( !name ) {\
-            win32_error( "win32: failed to load " #name " from library " #mod "!" );\
+attr_media_api m_bool32 opengl_initialize(void) {
+    #define load( lib, fn ) do {\
+        fn = (fn##FN*)GetProcAddress( global_win32_state->modules.lib, #fn );\
+        if( !fn ) {\
+            win32_error( "opengl_initialize: failed to load " #fn " from " #lib "!");\
             return false;\
         }\
     } while(0)
 
-    open( OPENGL32 );
-    open( GDI32 );
+    global_win32_state->modules.OPENGL32 = LoadLibraryA( "OPENGL32.DLL" );
+    if( !global_win32_state->modules.OPENGL32 ) {
+        win32_error( "opengl_initialize: failed to open library OPENGL32.DLL!" );
+        return false;
+    }
+
+    load( GDI32, DescribePixelFormat );
+    load( GDI32, ChoosePixelFormat );
+    load( GDI32, SetPixelFormat );
+    load( GDI32, SwapBuffers );
 
     load( OPENGL32, wglCreateContext );
     load( OPENGL32, wglDeleteContext );
@@ -130,266 +116,273 @@ attr_media_api b32 media_render_gl_initialize(void) {
     load( OPENGL32, wglShareLists );
     load( OPENGL32, wglCopyContext );
 
-    load( GDI32, DescribePixelFormat );
-    load( GDI32, ChoosePixelFormat );
-    load( GDI32, SetPixelFormat );
-    load( GDI32, SwapBuffers );
-
-    #undef open
     #undef load
-
-    read_write_fence();
-    interlocked_increment( &global_win32_state->gl_initialized );
     return true;
 }
 
-attr_internal void win32_gl_set_default_attr( struct Win32OpenGLAttributes* attr ) {
-    attr->dwFlags        = PFD_DOUBLEBUFFER;
-    attr->red            = 8;
-    attr->green          = 8;
-    attr->blue           = 8;
-    attr->alpha          = 8;
-    attr->depth          = 24;
-    attr->stencil        = 0;
-    attr->__profile_mask = WGL_CONTEXT_PROFILE_MASK_ARB;
-    attr->profile        = WGL_CONTEXT_CORE_PROFILE_BIT_ARB;
-    attr->__major_mask   = WGL_CONTEXT_MAJOR_VERSION_ARB;
-    attr->major          = MEDIA_OPENGL_DEFAULT_MAJOR_VERSION;
-    attr->__minor_mask   = WGL_CONTEXT_MINOR_VERSION_ARB;
-    attr->minor          = MEDIA_OPENGL_DEFAULT_MINOR_VERSION;
-    attr->__context_mask = WGL_CONTEXT_FLAGS_ARB;
-    attr->context_flags  = 0;
-}
+struct Win32OpenGLAttributes win32_opengl_default_attrib(void) {
+    struct Win32OpenGLAttributes attrib;
+    attrib.dwFlags         = PFD_DOUBLEBUFFER;
+    attrib.red             = 8;
+    attrib.green           = 8;
+    attrib.blue            = 8;
+    attrib.alpha           = 8;
+    attrib.depth           = 24;
+    attrib.stencil         = 0;
+    attrib.__profile_mask  = WGL_CONTEXT_PROFILE_MASK_ARB;
+    attrib.profile         = WGL_CONTEXT_CORE_PROFILE_BIT_ARB;
+    attrib.__major_mask    = WGL_CONTEXT_MAJOR_VERSION_ARB;
+    attrib.major           = 3;
+    attrib.__minor_mask    = WGL_CONTEXT_MINOR_VERSION_ARB;
+    attrib.minor           = 3;
+    attrib.__context_mask  = WGL_CONTEXT_FLAGS_ARB;
+    attrib.context_flags   = 0;
+    attrib.null_terminator = 0;
 
-attr_media_api MediaOpenGLAttributes media_render_gl_attr_create(void) {
-    struct Win32OpenGLAttributes attr = {};
-    win32_gl_set_default_attr( &attr );
-    return rcast( MediaOpenGLAttributes, &attr );
+    return attrib;
 }
-attr_media_api b32 media_render_gl_attr_set(
-    MediaOpenGLAttributes* in_attr, MediaOpenGLAttribute name, int value
+attr_media_api OpenGLAttributeList opengl_attr_create(void) {
+    struct Win32OpenGLAttributes attrib = win32_opengl_default_attrib();
+    return *(OpenGLAttributeList*)&attrib;
+}
+attr_media_api m_bool32 opengl_attr_set(
+    OpenGLAttributeList* attr, OpenGLAttribute name, int value 
 ) {
-    struct Win32OpenGLAttributes* attr = (struct Win32OpenGLAttributes*)in_attr;
+    struct Win32OpenGLAttributes* attrib = (struct Win32OpenGLAttributes*)attr;
     switch( name ) {
-        case MEDIA_OPENGL_ATTR_RED_SIZE: {
-            attr->red = value;
+        case OPENGL_ATTR_RED_SIZE: {
+            attrib->red = value;
         } break;
-        case MEDIA_OPENGL_ATTR_GREEN_SIZE: {
-            attr->green = value;
+        case OPENGL_ATTR_GREEN_SIZE: {
+            attrib->green = value;
         } break;
-        case MEDIA_OPENGL_ATTR_BLUE_SIZE: {
-            attr->blue = value;
+        case OPENGL_ATTR_BLUE_SIZE: {
+            attrib->blue = value;
         } break;
-        case MEDIA_OPENGL_ATTR_ALPHA_SIZE: {
-            attr->alpha = value;
+        case OPENGL_ATTR_ALPHA_SIZE: {
+            attrib->alpha = value;
         } break;
-        case MEDIA_OPENGL_ATTR_DEPTH_SIZE: {
-            attr->depth = value;
+        case OPENGL_ATTR_DEPTH_SIZE: {
+            attrib->depth = value;
         } break;
-        case MEDIA_OPENGL_ATTR_STENCIL_SIZE: {
-            attr->stencil = value;
+        case OPENGL_ATTR_STENCIL_SIZE: {
+            attrib->stencil = value;
         } break;
-        case MEDIA_OPENGL_ATTR_PROFILE: {
-            switch( (MediaOpenGLProfile)value ) {
-                case MEDIA_OPENGL_PROFILE_CORE: {
-                    attr->profile = WGL_CONTEXT_CORE_PROFILE_BIT_ARB;
+        case OPENGL_ATTR_PROFILE: {
+            switch( (OpenGLProfile)value ) {
+                case OPENGL_PROFILE_CORE: {
+                    attrib->profile = WGL_CONTEXT_CORE_PROFILE_BIT_ARB;
                 } break;
-                case MEDIA_OPENGL_PROFILE_COMPATIBILITY: {
-                    attr->profile = WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB;
+                case OPENGL_PROFILE_COMPATIBILITY: {
+                    attrib->profile = WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB;
                 } break;
-                default: return false;
+                default: {
+                    win32_error(
+                        "opengl_attr_set: invalid value for OPENGL_ATTR_PROFILE!");
+                } return false;
             }
         } break;
-        case MEDIA_OPENGL_ATTR_MAJOR: {
-            attr->major = value;
+        case OPENGL_ATTR_MAJOR: {
+            attrib->major = value;
         } break;
-        case MEDIA_OPENGL_ATTR_MINOR: {
-            attr->minor = value;
+        case OPENGL_ATTR_MINOR: {
+            attrib->minor = value;
         } break;
-        case MEDIA_OPENGL_ATTR_DOUBLE_BUFFER: {
-            attr->dwFlags = value ? PFD_DOUBLEBUFFER : 0;
+        case OPENGL_ATTR_DOUBLE_BUFFER: {
+            attrib->dwFlags = value ? PFD_DOUBLEBUFFER : 0;
         } break;
-        case MEDIA_OPENGL_ATTR_DEBUG: {
-            attr->context_flags = value ?
-                bitfield_set( attr->context_flags, WGL_CONTEXT_DEBUG_BIT_ARB ) :
-                bitfield_clear( attr->context_flags, WGL_CONTEXT_DEBUG_BIT_ARB );
-        } break;
-        case MEDIA_OPENGL_ATTR_FORWARD_COMPATIBILITY: {
-            attr->context_flags = value ?
-                bitfield_set( attr->context_flags, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB ) :
-                bitfield_clear( attr->context_flags, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB );
-        } break;
-
-        default: return false;
-    }
-    return true;
-}
-attr_media_api int media_render_gl_attr_get(
-    MediaOpenGLAttributes* in_attr, MediaOpenGLAttribute name
-) {
-    struct Win32OpenGLAttributes* attr = (struct Win32OpenGLAttributes*)in_attr;
-    switch( name ) {
-        case MEDIA_OPENGL_ATTR_RED_SIZE:     return attr->red;
-        case MEDIA_OPENGL_ATTR_GREEN_SIZE:   return attr->green;
-        case MEDIA_OPENGL_ATTR_BLUE_SIZE:    return attr->blue;
-        case MEDIA_OPENGL_ATTR_ALPHA_SIZE:   return attr->alpha;
-        case MEDIA_OPENGL_ATTR_DEPTH_SIZE:   return attr->depth;
-        case MEDIA_OPENGL_ATTR_STENCIL_SIZE: return attr->stencil;
-        case MEDIA_OPENGL_ATTR_PROFILE: {
-            if( attr->profile == WGL_CONTEXT_CORE_PROFILE_BIT_ARB ) {
-                return MEDIA_OPENGL_PROFILE_CORE;
+        case OPENGL_ATTR_DEBUG: {
+            if( value ) {
+                attrib->context_flags |= WGL_CONTEXT_DEBUG_BIT_ARB;
             } else {
-                return MEDIA_OPENGL_PROFILE_COMPATIBILITY;
+                attrib->context_flags &= ~WGL_CONTEXT_DEBUG_BIT_ARB;
             }
         } break;
-        case MEDIA_OPENGL_ATTR_MAJOR:            return attr->major;
-        case MEDIA_OPENGL_ATTR_MINOR:            return attr->minor;
-        case MEDIA_OPENGL_ATTR_DOUBLE_BUFFER:
-            return bitfield_check( attr->dwFlags, PFD_DOUBLEBUFFER );
-        case MEDIA_OPENGL_ATTR_DEBUG:
-            return bitfield_check( attr->context_flags, WGL_CONTEXT_DEBUG_BIT_ARB );
-        case MEDIA_OPENGL_ATTR_FORWARD_COMPATIBILITY:
-            return bitfield_check( attr->context_flags, WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB );
-        default: return I32_MAX;
+        case OPENGL_ATTR_FORWARD_COMPATIBILITY: {
+            if( value ) {
+                attrib->context_flags |= WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB;
+            } else {
+                attrib->context_flags &= ~WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB;
+            }
+        } break;
     }
+
+    return true;
+}
+attr_media_api m_int32 opengl_attr_get(
+    OpenGLAttributeList* attr, OpenGLAttribute name 
+) {
+    struct Win32OpenGLAttributes* attrib = (struct Win32OpenGLAttributes*)attr;
+    switch( name ) {
+        case OPENGL_ATTR_RED_SIZE              : return attrib->red;
+        case OPENGL_ATTR_GREEN_SIZE            : return attrib->green;
+        case OPENGL_ATTR_BLUE_SIZE             : return attrib->blue;
+        case OPENGL_ATTR_ALPHA_SIZE            : return attrib->alpha;
+        case OPENGL_ATTR_DEPTH_SIZE            : return attrib->depth;
+        case OPENGL_ATTR_STENCIL_SIZE          : return attrib->stencil;
+        case OPENGL_ATTR_PROFILE               : {
+            if( attrib->profile == WGL_CONTEXT_CORE_PROFILE_BIT_ARB ) {
+                return OPENGL_PROFILE_CORE;
+            } else {
+                return OPENGL_PROFILE_COMPATIBILITY;
+            }
+        } break;
+        case OPENGL_ATTR_MAJOR                 : return attrib->major;
+        case OPENGL_ATTR_MINOR                 : return attrib->minor;
+        case OPENGL_ATTR_DOUBLE_BUFFER         :
+            return (attrib->dwFlags & PFD_DOUBLEBUFFER) != 0;
+        case OPENGL_ATTR_DEBUG                 :
+            return (attrib->context_flags & WGL_CONTEXT_DEBUG_BIT_ARB) != 0;
+        case OPENGL_ATTR_FORWARD_COMPATIBILITY :
+            return (attrib->context_flags & WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB) != 0;
+    }
+    return -1;
 }
 
-attr_media_api OpenGLRenderContext* media_render_gl_context_create(
-    MediaSurface* in_surface, MediaOpenGLAttributes* opt_attr
+attr_media_api OpenGLRenderContext* opengl_context_create(
+    SurfaceHandle* in_surface, OpenGLAttributeList* opt_attributes 
 ) {
-    surface_to_win32( in_surface );
+    struct Win32Surface* surface = in_surface;
 
-    struct Win32OpenGLAttributes  _attr = {};
-    struct Win32OpenGLAttributes* attr = &_attr;
-    if( opt_attr ) {
-        attr = (struct Win32OpenGLAttributes*)opt_attr;
+    struct Win32OpenGLAttributes attr;
+    struct Win32OpenGLAttributes* attrib = &attr;
+    if( opt_attributes ) {
+        attrib  = (struct Win32OpenGLAttributes*)opt_attributes;
     } else {
-        win32_gl_set_default_attr( &_attr );
+        *attrib = win32_opengl_default_attrib();
     }
 
-    wglMakeCurrent( NULL, NULL );
+    wglMakeCurrent( 0, 0 );
 
-    PIXELFORMATDESCRIPTOR dpf = {};
-    dpf.nSize        = sizeof( dpf );
-    dpf.iPixelType   = PFD_TYPE_RGBA;
-    dpf.nVersion     = 1;
-    dpf.dwFlags      = PFD_SUPPORT_OPENGL | PFD_DRAW_TO_WINDOW | attr->dwFlags;
-    dpf.cColorBits   = attr->red + attr->green + attr->blue + attr->alpha;
+    PIXELFORMATDESCRIPTOR desired_pfd;
+    memset( &desired_pfd, 0, sizeof(desired_pfd) );
 
-    dpf.cRedBits     = attr->red;
-    dpf.cRedShift    = 0;
+    desired_pfd.nSize      = sizeof( desired_pfd );
+    desired_pfd.iPixelType = PFD_TYPE_RGBA;
+    desired_pfd.nVersion   = 1;
+    desired_pfd.dwFlags    = PFD_SUPPORT_OPENGL | PFD_DRAW_TO_WINDOW | attrib->dwFlags;
+    desired_pfd.cColorBits = attrib->red + attrib->green + attrib->blue + attrib->alpha;
 
-    dpf.cGreenBits   = attr->green;
-    dpf.cGreenShift  = attr->red;
+    desired_pfd.cRedBits  = attrib->red;
+    desired_pfd.cRedShift = 0;
 
-    dpf.cBlueBits    = attr->blue;
-    dpf.cBlueShift   = attr->red + attr->green;
+    desired_pfd.cGreenBits  = attrib->green;
+    desired_pfd.cGreenShift = attrib->red;
 
-    dpf.cAlphaBits   = attr->alpha;
-    dpf.cAlphaShift  = attr->red + attr->green + attr->blue;
+    desired_pfd.cBlueBits  = attrib->blue;
+    desired_pfd.cBlueShift = attrib->red + attrib->green;
 
-    dpf.cDepthBits   = attr->depth;
-    dpf.cStencilBits = attr->stencil;
-    dpf.iLayerType   = PFD_MAIN_PLANE;
+    desired_pfd.cAlphaBits  = attrib->alpha;
+    desired_pfd.cAlphaShift = attrib->red + attrib->green + attrib->blue;
 
-    i32 pf_index = ChoosePixelFormat( surface->hdc, &dpf );
+    desired_pfd.cDepthBits   = attrib->depth;
+    desired_pfd.cStencilBits = attrib->stencil;
+    desired_pfd.iLayerType   = PFD_MAIN_PLANE;
 
-    PIXELFORMATDESCRIPTOR spf = {};
-    if( !DescribePixelFormat( surface->hdc, pf_index, sizeof(spf), &spf ) ) {
+    int pfd_index = ChoosePixelFormat( surface->hdc, &desired_pfd );
+
+    PIXELFORMATDESCRIPTOR pfd;
+    memset( &pfd, 0, sizeof(pfd) );
+    if( !DescribePixelFormat( surface->hdc, pfd_index, sizeof(pfd), &pfd ) ) {
         win32_error( "failed to get pixel format!" );
-        return false;
+        return NULL;
     }
 
-    if( !SetPixelFormat( surface->hdc, pf_index, &spf ) ) {
+    if( !SetPixelFormat( surface->hdc, pfd_index, &pfd ) ) {
         win32_error( "failed to set pixel format!" );
-        return false;
+        return NULL;
     }
 
     HGLRC temp = wglCreateContext( surface->hdc );
     if( !temp ) {
-        win32_error( "failed to create opengl temporary context!" );
-        return false;
+        win32_error( "failed to create temporary OpenGL context!" );
+        return NULL;
     }
 
     if( !wglMakeCurrent( surface->hdc, temp ) ) {
+        wglDeleteContext( temp );
         win32_error( "failed to make dummy opengl context current!" );
-        return false;
+        return NULL;
     }
 
     if( !wglCreateContextAttribsARB ) {
-        #define wgl_load( name ) do {\
+        #define load( name ) do {\
             name = (name##FN*)wglGetProcAddress( #name );\
             if( !name ) {\
-                win32_error( "failed to load " #name " from wglGetProcAddress!" );\
+                wglMakeCurrent( 0, 0 );\
                 wglDeleteContext( temp );\
-                return false;\
+                win32_error( "failed to load " #name " from wglGetProcAddress!" );\
+                return NULL;\
             }\
         } while(0)
 
-        wgl_load( wglCreateContextAttribsARB );
-        wgl_load( wglSwapIntervalEXT );
+        load( wglCreateContextAttribsARB );
+        load( wglSwapIntervalEXT );
 
-        #undef wgl_load
-    }
+        #undef load
+    } 
 
-    HGLRC rc    = wglCreateContextAttribsARB( surface->hdc, NULL, attr->attribs );
-    DWORD error = GetLastError();
+    HGLRC rc  = wglCreateContextAttribsARB( surface->hdc, NULL, attrib->attribs );
+    DWORD err = GetLastError();
+
     wglDeleteContext( temp );
 
     if( !rc ) {
-        switch( error ) {
+        switch( err ) {
             case ERROR_INVALID_VERSION_ARB: {
-                media_error( "win32: failed to create opengl context because of invalid version!" );
+                win32_error(
+                    "failed to create opengl context because of invalid version!");
             } break;
             case ERROR_INVALID_PROFILE_ARB: {
-                media_error( "win32: failed to create opengl context because of invalid profile!" );
+                win32_error(
+                    "failed to create opengl context because of invalid profile!" );
             } break;
             default: {
-                media_error( "win32: [{u,X,f}] failed to create opengl context!", error );
+                win32_error(
+                    "failed to create OpenGL context for unknown reason!" );
             } break;
         }
         return NULL;
     }
 
-    return (OpenGLRenderContext*)rc;
+    return rc;
 }
-attr_media_api b32 media_render_gl_context_bind(
-    MediaSurface* in_surface, OpenGLRenderContext* glrc
+attr_media_api m_bool32 opengl_context_bind(
+    SurfaceHandle* in_surface, OpenGLRenderContext* glrc 
 ) {
-    if( !in_surface ) {
-        return wglMakeCurrent( NULL, NULL ) == TRUE;
-    } else {
-        surface_to_win32( in_surface );
-        return wglMakeCurrent( surface->hdc, glrc ) == TRUE;
+    if( !in_surface || !glrc ) {
+        return wglMakeCurrent( 0, 0 ) != FALSE;
     }
+    struct Win32Surface* surface = in_surface;
+    return wglMakeCurrent( surface->hdc, glrc ) != FALSE;
 }
-attr_media_api void media_render_gl_context_destroy( OpenGLRenderContext* glrc ) {
+attr_media_api void opengl_context_destroy( OpenGLRenderContext* glrc ) {
     wglDeleteContext( glrc );
 }
-attr_media_api b32 media_render_gl_share_display_lists(
-    OpenGLRenderContext* a, OpenGLRenderContext* b
+attr_media_api m_bool32 opengl_context_share(
+    OpenGLRenderContext* a, OpenGLRenderContext* b 
 ) {
-    return wglShareLists( a, b ) == TRUE;
+    return wglShareLists( a, b ) != FALSE;
 }
-attr_media_api void* media_render_gl_load_proc( const char* function_name ) {
+attr_media_api void* opengl_load_proc( const char* function_name ) {
     void* res = (void*)wglGetProcAddress( function_name );
     if( !res ) {
-        HMODULE OPENGL32 = GetModuleHandleA( "OPENGL32.DLL" );
-        res = (void*)GetProcAddress( OPENGL32, function_name );
+        res = (void*)GetProcAddress(
+            global_win32_state->modules.OPENGL32, function_name );
     }
-
     return res;
 }
-attr_media_api b32 media_render_gl_swap_buffers( MediaSurface* in_surface ) {
-    surface_to_win32( in_surface );
-    return SwapBuffers( surface->hdc ) == TRUE;
+attr_media_api m_bool32 opengl_swap_buffers( SurfaceHandle* in_surface ) {
+    struct Win32Surface* surface = in_surface;
+    return SwapBuffers( surface->hdc ) != FALSE;
 }
-attr_media_api b32 media_render_gl_swap_interval(
-    MediaSurface* surface, int interval
+attr_media_api m_bool32 opengl_swap_interval(
+    SurfaceHandle* in_surface, int interval 
 ) {
-    unused(surface);
-    return wglSwapIntervalEXT( interval ) == TRUE;
+    unused( in_surface );
+    return wglSwapIntervalEXT( interval ) != FALSE;
 }
 
-#endif /* Platform Windows */
+#undef def
+#endif
 

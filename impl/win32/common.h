@@ -2,226 +2,252 @@
 #define MEDIA_IMPL_WIN32_COMMON_H
 /**
  * @file   common.h
- * @brief  Common structures and functions used throughout Media Win32 Implementation.
+ * @brief  Media Windows Common header.
  * @author Alicia Amarilla (smushyaa@gmail.com)
- * @date   March 27, 2024
+ * @date   August 10, 2024
 */
-#include "core/defines.h"
-
-#if defined(CORE_PLATFORM_WINDOWS)
-#include "core/types.h"
-#include "core/collections.h"
+#include "media/defines.h"
+#if defined(MEDIA_PLATFORM_WINDOWS)
+#include "media/types.h"
+#include "media/internal/logging.h"
 #include "media/cursor.h"
-// #include "media/keyboard.h"
 
+// IWYU pragma: begin_exports
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
-#include <commdlg.h>
-#include <xinput.h>
+#include <combaseapi.h>
+
+// NOTE(alicia): defined in winuser.h, conflicts with MouseButton enum
+#undef MB_RIGHT
+// IWYU pragma: end_exports
+
+#define WIN32_DEFAULT_WINDOW_CLASS L"MediaDefaultWindow"
+
+#if !defined(DWMWA_USE_IMMERSIVE_DARK_MODE)
+    #define DWMWA_USE_IMMERSIVE_DARK_MODE (20)
+#endif
 
 struct Win32State {
-    WNDCLASSEXA   def_wndclass;
-    volatile HWND cursor_lock;
-    b32           gl_initialized;
-
-    DWORD pid;
-
     union {
         struct {
             HMODULE USER32;
             HMODULE GDI32;
             HMODULE DWMAPI;
-            HMODULE OLE32;
-            HMODULE COMDLG32;
-            HMODULE OPENGL32;
             HMODULE XINPUT;
+            HMODULE OPENGL32;
+            HMODULE OLE32;
         };
-        HMODULE modules[7];
-    };
-
-    HCURSOR cursors[MEDIA_CURSOR_COUNT];
+        HMODULE array[7];
+    } modules;
+    enum KeyboardMod mod;
+    enum MouseButton mb;
 };
+extern struct Win32State* global_win32_state;
+extern HCURSOR global_win32_cursors[CURSOR_TYPE_COUNT];
+extern m_bool32 global_win32_cursor_hidden;
 
-// NOTE(alicia): common constants and globals
+#define win32_error(...) media_error( "win32: " __VA_ARGS__)
+#define win32_warn(...) media_warn( "win32: " __VA_ARGS__)
 
-volatile extern struct Win32State* global_win32_state;
+#define CoCheck( hres ) ((hres) == (S_OK))
+#define CoRelease( punk ) do {\
+    if( (punk) != NULL ) {\
+        (punk)->lpVtbl->Release( (punk) );\
+        (punk) = NULL;\
+    }\
+} while(0)
 
-// NOTE(alicia): common functions
+wchar_t* win32_utf8_to_ucs2_alloc(
+    m_uint32 utf8_len, const char* utf8, m_uint32* opt_out_len );
 
-DWORD win32_message_window_thread( LPVOID in_params );
-LRESULT win32_message_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam );
+MONITORINFO win32_monitor_info( HWND opt_hwnd );
+
+void win32_error_message_full(
+    DWORD error_code, m_uint32 message_len, const char* message );
+
+#define win32_error_message( error_code, message )\
+    win32_error_message_full( error_code, sizeof(message) - 1, message )
+
 LRESULT win32_winproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam );
-HWND win32_get_active_window(void);
-attr_unused void win32_error_text(
-    DWORD code, usize format_len, const char* format, ... );
 
-#if defined(MEDIA_ENABLE_LOGGING)
-    #define win32_error( format, ... )\
-        win32_error_text( GetLastError(),\
-            sizeof( "win32: " format) - 1,\
-            "win32: " format, ##__VA_ARGS__ )
-#else
-    #define win32_error( ... )
-#endif
+HWND win32_get_focused_window(void);
 
-// NOTE(alicia): USER32 declarations.
+// NOTE(alicia): windows library functions
 
 #define decl( ret, fn, ... )\
-typedef ret fn##FN( __VA_ARGS__ );\
-extern fn##FN* in_##fn
+    typedef ret fn##FN( __VA_ARGS__ );\
+    extern fn##FN* in_##fn
 
-decl( ATOM, RegisterClassExA, const WNDCLASSEXA* );
-#define RegisterClassExA in_RegisterClassExA
+// NOTE(alicia): USER32
 
-decl( BOOL, UnregisterClassA, LPCSTR, HINSTANCE );
-#define UnregisterClassA in_UnregisterClassA
+decl( int, MessageBoxW, HWND hWnd, LPCWSTR lpText, LPCWSTR lpCaption, UINT uType );
+#define MessageBoxW in_MessageBoxW
 
-decl( BOOL, AdjustWindowRectEx, LPRECT, DWORD, BOOL, DWORD );
-#define AdjustWindowRectEx in_AdjustWindowRectEx
+decl( ATOM, RegisterClassExW, const WNDCLASSEXW* unnamedParam1 );
+#define RegisterClassExW in_RegisterClassExW
 
-decl( BOOL, GetClientRect, HWND, LPRECT );
-#define GetClientRect in_GetClientRect
+decl( BOOL, UnregisterClassW, LPCWSTR lpClassName, HINSTANCE hInstance );
+#define UnregisterClassW in_UnregisterClassW
 
-decl( HWND, CreateWindowExA,
-     DWORD, LPCSTR, LPCSTR, DWORD,
-     int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID );
-#define CreateWindowExA in_CreateWindowExA
+decl( HWND, CreateWindowExW,
+     DWORD dwExStyle, LPCWSTR lpClassName,
+     LPCWSTR lpWindowName, DWORD dwStyle,
+     int X, int Y, int nWidth, int nHeight,
+     HWND hWndParent, HMENU hMenu,
+     HINSTANCE hInstance, LPVOID lpParam );
+#define CreateWindowExW in_CreateWindowExW
 
-decl( BOOL, DestroyWindow, HWND );
+decl( BOOL, DestroyWindow, HWND hWnd );
 #define DestroyWindow in_DestroyWindow
 
-decl( BOOL, SetWindowTextA, HWND, LPCSTR );
-#define SetWindowTextA in_SetWindowTextA
+decl( LRESULT, DefWindowProcW, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam );
+#define DefWindowProcW in_DefWindowProcW
 
-decl( BOOL, SetWindowPos, HWND, HWND, int, int, int, int, UINT );
-#define SetWindowPos in_SetWindowPos
+decl( BOOL, AdjustWindowRectEx,
+     LPRECT lpRect, DWORD dwStyle, BOOL bMenu, DWORD dwExStyle );
+#define AdjustWindowRectEx in_AdjustWindowRectEx
 
-decl( BOOL, GetWindowPlacement, HWND, WINDOWPLACEMENT* );
-#define GetWindowPlacement in_GetWindowPlacement
+decl( BOOL, GetClientRect, HWND hWnd, LPRECT lpRect );
+#define GetClientRect in_GetClientRect
 
-decl( BOOL, SetWindowPlacement, HWND, const WINDOWPLACEMENT* );
-#define SetWindowPlacement in_SetWindowPlacement
-
-decl( BOOL, RegisterRawInputDevices, PCRAWINPUTDEVICE, UINT, UINT );
-#define RegisterRawInputDevices in_RegisterRawInputDevices
-
-decl( UINT, GetRawInputData, HRAWINPUT, UINT, LPVOID, PUINT, UINT );
-#define GetRawInputData in_GetRawInputData
-
-decl( LONG_PTR, SetWindowLongPtrA, HWND, int, LONG_PTR );
-#define SetWindowLongPtrA in_SetWindowLongPtrA
-
-decl( LONG_PTR, GetWindowLongPtrA, HWND, int );
-#define GetWindowLongPtrA in_GetWindowLongPtrA
-
-decl( BOOL, PeekMessageA, LPMSG, HWND, UINT, UINT, UINT );
-#define PeekMessageA in_PeekMessageA
-
-decl( LRESULT, DispatchMessageA, const MSG* );
-#define DispatchMessageA in_DispatchMessageA
-
-decl( LRESULT, DefWindowProcA, HWND, UINT, WPARAM, LPARAM );
-#define DefWindowProcA in_DefWindowProcA
-
-decl( HMONITOR, MonitorFromWindow, HWND, DWORD );
-#define MonitorFromWindow in_MonitorFromWindow
-
-decl( HMONITOR, MonitorFromPoint, POINT, DWORD );
-#define MonitorFromPoint in_MonitorFromPoint
-
-decl( BOOL, GetMonitorInfoA, HMONITOR, LPMONITORINFO );
-#define GetMonitorInfoA in_GetMonitorInfoA
-
-decl( BOOL, ClientToScreen, HWND, LPPOINT );
-#define ClientToScreen in_ClientToScreen
-
-decl( int, ShowCursor, BOOL );
-#define ShowCursor in_ShowCursor
-
-decl( BOOL, SetCursorPos, int, int );
-#define SetCursorPos in_SetCursorPos
-
-decl( HDC, GetDC, HWND );
+decl( HDC, GetDC, HWND hWnd );
 #define GetDC in_GetDC
 
-decl( int, ReleaseDC, HWND, HDC );
+decl( int, ReleaseDC, HWND hWnd, HDC hDC );
 #define ReleaseDC in_ReleaseDC
 
-decl( BOOL, ShowWindow, HWND, int );
+decl( BOOL, ShowWindow, HWND hWnd, int nCmdShow );
 #define ShowWindow in_ShowWindow
 
-decl( int, MessageBoxA, HWND, LPCSTR, LPCSTR, UINT );
-#define MessageBoxA in_MessageBoxA
+decl( BOOL, PeekMessageW,
+     LPMSG lpMsg, HWND hWnd,
+     UINT wMsgFilterMin, UINT wMsgFilterMax, UINT wRemoveMsg );
+#define PeekMessageW in_PeekMessageW
 
-decl( BOOL, PostMessageA, HWND, UINT, WPARAM, LPARAM );
-#define PostMessageA in_PostMessageA
+decl( BOOL, TranslateMessage, const MSG* lpMsg );
+#define TranslateMessage in_TranslateMessage
+
+decl( LRESULT, DispatchMessageW, const MSG* lpMsg );
+#define DispatchMessageW in_DispatchMessageW 
+
+decl( BOOL, SetWindowTextW, HWND hWnd, LPCWSTR lpString );
+#define SetWindowTextW in_SetWindowTextW
+
+decl( BOOL, SetWindowPos,
+     HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags );
+#define SetWindowPos in_SetWindowPos
+
+decl( HMONITOR, MonitorFromPoint, POINT pt, DWORD dwFlags );
+#define MonitorFromPoint in_MonitorFromPoint
+
+decl( HMONITOR, MonitorFromWindow, HWND hwnd, DWORD dwFlags );
+#define MonitorFromWindow in_MonitorFromWindow
+
+decl( BOOL, GetMonitorInfoW, HMONITOR hMonitor, LPMONITORINFO lpmi );
+#define GetMonitorInfoW in_GetMonitorInfoW
+
+decl( BOOL, GetWindowPlacement, HWND hWnd, WINDOWPLACEMENT* lpwndpl );
+#define GetWindowPlacement in_GetWindowPlacement
+
+decl( BOOL, SetWindowPlacement, HWND hWnd, const WINDOWPLACEMENT* lpwndpl );
+#define SetWindowPlacement in_SetWindowPlacement
+
+decl( HCURSOR, SetCursor, HCURSOR hCursor );
+#define SetCursor in_SetCursor
+
+decl( HCURSOR, LoadCursorA, HINSTANCE hInstance, LPCSTR lpCursorName );
+#define LoadCursorA in_LoadCursorA
+
+decl( int, ShowCursor, BOOL bShow );
+#define ShowCursor in_ShowCursor
+
+decl( BOOL, ClientToScreen, HWND hWnd, LPPOINT lpPoint );
+#define ClientToScreen in_ClientToScreen
+
+decl( BOOL, SetCursorPos, int X, int Y );
+#define SetCursorPos in_SetCursorPos
+
+decl( UINT, MapVirtualKeyW, UINT uCode, UINT uMapType );
+#define MapVirtualKeyW in_MapVirtualKeyW
 
 decl( HWND, GetForegroundWindow, void );
 #define GetForegroundWindow in_GetForegroundWindow
 
-decl( SHORT, GetKeyState, int );
-#define GetKeyState in_GetKeyState
-
-decl( void, PostQuitMessage, int );
-#define PostQuitMessage in_PostQuitMessage
-
-decl( BOOL, WaitMessage, void );
-#define WaitMessage in_WaitMessage
-
-decl( HCURSOR, LoadCursorA, HINSTANCE, LPCSTR );
-#define LoadCursorA in_LoadCursorA
-
-decl( HCURSOR, SetCursor, HCURSOR );
-#define SetCursor in_SetCursor
-
-decl( BOOL, ClipCursor, const RECT* );
-#define ClipCursor in_ClipCursor
-
-decl( int, MapWindowPoints, HWND, HWND, LPPOINT, UINT );
-#define MapWindowPoints in_MapWindowPoints
-
-decl( UINT, MapVirtualKeyA, UINT, UINT );
-#define MapVirtualKeyA in_MapVirtualKeyA
-
-decl( int, ToUnicode, UINT, UINT, const BYTE*, LPWSTR, int, UINT );
-#define ToUnicode in_ToUnicode
-
-decl( BOOL, GetCursorPos, LPPOINT );
-#define GetCursorPos in_GetCursorPos
-
-decl( BOOL, ScreenToClient, HWND, LPPOINT );
-#define ScreenToClient in_ScreenToClient
-
-decl( DWORD, GetWindowThreadProcessId, HWND, LPDWORD );
+decl( DWORD, GetWindowThreadProcessId, HWND hWnd, LPDWORD lpdwProcessId );
 #define GetWindowThreadProcessId in_GetWindowThreadProcessId
 
-// NOTE(alicia): GDI32 declarations
+decl( BOOL, PostMessageW, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam );
+#define PostMessageW in_PostMessageW
 
-decl( HGDIOBJ, GetStockObject, int );
+decl( BOOL, GetCursorPos, LPPOINT lpPoint );
+#define GetCursorPos in_GetCursorPos
+
+decl( SHORT, GetKeyState, int nVirtKey );
+#define GetKeyState in_GetKeyState
+
+decl( int, ToUnicode,
+     UINT wVirtKey, UINT wScanCode,
+     const BYTE* lpKeyState, LPWSTR pwszBuff, int cchBuff, UINT wFlags );
+#define ToUnicode in_ToUnicode
+
+decl( BOOL, ScreenToClient, HWND hWnd, LPPOINT lpPoint );
+#define ScreenToClient in_ScreenToClient
+
+#if defined(MEDIA_ARCH_64_BIT)
+
+    decl( LONG_PTR, SetWindowLongPtrW, HWND hWnd, int nIndex, LONG_PTR dwNewLong );
+    #define SetWindowLongPtrW in_SetWindowLongPtrW
+
+    decl( LONG_PTR, GetWindowLongPtrW, HWND hWnd, int nIndex );
+    #define GetWindowLongPtrW in_GetWindowLongPtrW
+
+    #define WIN32_PTR LONG_PTR
+
+#else /* Arch 64-bit */
+
+    typedef LONG SetWindowLongWFN( HWND hWnd, int nIndex, LONG dwNewLong );
+    typedef LONG GetWindowLongWFN( HWND hWnd, int nIndex );
+
+    extern SetWindowLongWFN* in_SetWindowLongW;
+    extern GetWindowLongWFN* in_GetWindowLongW;
+
+    #define SetWindowLongPtrW in_SetWindowLongW
+    #define GetWindowLongPtrW in_GetWindowLongW
+
+    #define WIN32_PTR LONG
+
+#endif /* Arch 32-bit */
+
+// NOTE(alicia): GDI32
+
+decl( HGDIOBJ, GetStockObject, int i );
 #define GetStockObject in_GetStockObject
 
-// NOTE(alicia): DWMAPI declarations
+// NOTE(alicia): OLE32
 
-decl( HRESULT, DwmSetWindowAttribute, HWND, DWORD, LPCVOID, DWORD );
+decl( HRESULT, CoInitialize, LPVOID pvReserved );
+#define CoInitialize in_CoInitialize
+
+decl( HRESULT, CoCreateInstance,
+    REFCLSID rclsid, LPUNKNOWN pUnkOuter,
+    DWORD dwClsContext, REFIID riid, LPVOID* ppv );
+#define CoCreateInstance in_CoCreateInstance
+
+decl( void, CoTaskMemFree, LPVOID pv );
+#define CoTaskMemFree in_CoTaskMemFree
+
+decl( void, CoUninitialize, void );
+#define CoUninitialize in_CoUninitialize
+
+decl( HRESULT, PropVariantClear, PROPVARIANT* pvar );
+#define PropVariantClear in_PropVariantClear
+
+// NOTE(alicia): DWMAPI
+
+decl( HRESULT, DwmSetWindowAttribute,
+     HWND hwnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute );
 #define DwmSetWindowAttribute in_DwmSetWindowAttribute
 
-// NOTE(alicia): COMDLG32 declarations
-
-decl( BOOL, GetOpenFileNameA, LPOPENFILENAMEA );
-#define GetOpenFileNameA in_GetOpenFileNameA
-
-decl( DWORD, CommDlgExtendedError, void );
-#define CommDlgExtendedError in_CommDlgExtendedError
-
-// NOTE(alicia): XINPUT declarations
-
-decl( DWORD, XInputGetState, DWORD, XINPUT_STATE* );
-#define XInputGetState in_XInputGetState
-
-decl( DWORD, XInputSetState, DWORD, XINPUT_VIBRATION* );
-#define XInputSetState in_XInputSetState
-
 #endif /* Platform Windows */
-
 #endif /* header guard */

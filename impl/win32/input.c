@@ -1,589 +1,622 @@
 /**
  * @file   input.c
- * @brief  Input handling in win32 implementation.
+ * @brief  Media Windows Input.
  * @author Alicia Amarilla (smushyaa@gmail.com)
- * @date   April 21, 2024
+ * @date   August 12, 2024
 */
-#include "impl/win32/input.h"
-
-#if defined(CORE_PLATFORM_WINDOWS)
-#include "media/internal/logging.h"
+#include "media/defines.h"
+#if defined(MEDIA_PLATFORM_WINDOWS)
+#include "media/surface.h"
+#include "media/input.h"
 #include "impl/win32/common.h"
-
-#include "core/prelude.h"
-#include "core/memory.h"
-#include "core/math/macros.h"
+#include "impl/win32/input.h"
 
 #include <xinput.h>
 #include <hidusage.h>
 
-#if defined(MEDIA_ENABLE_LOGGING) && defined(CORE_ENABLE_ASSERTIONS)
-#define media_assert( condition, format, ... ) do {\
-    if( !(condition) ) {\
-        media_error( "assertion failed: "\
-            #condition " message: " format, ##__VA_ARGS__ );\
-        panic();\
-    }\
-} while(0)
-#else /* Logging && Assertions Enabled */
-#define media_assert( ... ) unused( __VA_ARGS__ )
-#endif /* Logging && Assertions Disabled */
+#define WIN32_INPUT_WINDOW_CLASS L"MediaInputWindow"
+#define WIN32_INPUT_POLL_XINPUT_MS 2
 
-volatile struct Win32InputState* global_media_win32_input_state = NULL;
+struct Win32Input* global_win32_input = NULL;
 
-attr_internal InputKeycode win32_vk_to_keycode( DWORD vk );
+#define def( ret, fn, ... )\
+    typedef ret fn##FN( __VA_ARGS__ );\
+    fn##FN* in_##fn = NULL
 
-attr_media_api usize media_input_query_memory_requirement(void) {
-    return sizeof(struct Win32InputState);
+def( BOOL, RegisterRawInputDevices,
+    PCRAWINPUTDEVICE pRawInputDevices, UINT uiNumDevices, UINT cbSize );
+#define RegisterRawInputDevices in_RegisterRawInputDevices
+
+def( UINT, GetRawInputData,
+    HRAWINPUT hRawInput, UINT uiCommand,
+    LPVOID pData, PUINT pcbSize, UINT cbSizeHeader );
+#define GetRawInputData in_GetRawInputData
+
+def( DWORD, XInputGetState, DWORD dwUserIndex, XINPUT_STATE* pState );
+#define XInputGetState in_XInputGetState
+
+def( DWORD, XInputSetState, DWORD dwUserIndex, XINPUT_VIBRATION* pVibration );
+#define XInputSetState in_XInputSetState
+
+DWORD XInputSetState_stub( DWORD dwUserIndex, XINPUT_VIBRATION* pVibration ) {
+    unused( dwUserIndex, pVibration );
+    return ERROR_SUCCESS;
 }
-attr_media_api b32  media_input_initialize( void* buffer ) {
-    if( !buffer ) {
-        media_error( "Attempted to initialize input with NULL buffer!" );
-        return false;
+
+LRESULT win32_winproc_input( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam );
+
+DWORD win32_xinput_thread( LPVOID lpParameter ) {
+    volatile long* atomic = (volatile long*)lpParameter;
+    unused(atomic);
+
+    for( ;; ) {
+        MemoryBarrier();
+        if( InterlockedCompareExchange( atomic, *atomic, 1 ) ) {
+            break;
+        }
+        MemoryBarrier();
+
+        XINPUT_STATE pState;
+        for( DWORD i = 0; i < XUSER_MAX_COUNT; ++i ) {
+            DWORD res = XInputGetState( i, &pState );
+            global_win32_input->gp_connected[i] = res != ERROR_DEVICE_NOT_CONNECTED;
+        }
+
+        Sleep( WIN32_INPUT_POLL_XINPUT_MS );
     }
-    global_media_win32_input_state = buffer;
 
-    /* Initialize Lock Keys State */ {
-        b32 caps = GetKeyState( VK_CAPITAL ) & 0x0001;
-        global_media_win32_input_state->keymod = caps ? INPUT_KEYMOD_CAPSLK : 0;
+    InterlockedIncrement( atomic );
+    return 0;
+}
 
-        global_media_win32_input_state->keys_vk[VK_CAPITAL] = caps ? 0x0001 : 0;
+attr_media_api m_uintptr input_subsystem_query_memory_requirement(void) {
+    return sizeof(*global_win32_input);
+}
+attr_media_api m_bool32 input_subsystem_initialize( void* buffer ) {
+    #define load( lib, fn ) do {\
+        if( !fn ) {\
+            fn = (fn##FN*)GetProcAddress( global_win32_state->modules.lib, #fn );\
+            if( !fn ) {\
+                win32_error( "input_subsystem_initialize:"\
+                    "failed to load " #fn " from " #lib "!");\
+                return false;\
+            }\
+        }\
+    } while(0)
 
-        global_media_win32_input_state->keymod |=
-            (GetKeyState( VK_SCROLL ) & 0x0001) ? INPUT_KEYMOD_SCRLK : 0;
-        global_media_win32_input_state->keymod |=
-            (GetKeyState( VK_NUMLOCK ) & 0x0001) ? INPUT_KEYMOD_NUMLK : 0;
+    HMODULE module     = GetModuleHandleW(0);
+    global_win32_input = buffer;
+
+    load( USER32, RegisterRawInputDevices );
+    load( USER32, GetRawInputData );
+
+    m_bool32 xinput_1_3 = false;
+    HMODULE xinput = LoadLibraryA( "XINPUT1_4.DLL" );
+    if( !xinput ) {
+        xinput = LoadLibraryA( "XINPUT9_1_0.DLL" );
+        if( !xinput ) {
+            xinput = LoadLibraryA( "XINPUT1_3.DLL" );
+            if( !xinput ) {
+                win32_error_message( GetLastError(), "failed to load XINPUT!" );
+            } else {
+                xinput_1_3 = true;
+            }
+        }
+    }
+    global_win32_state->modules.XINPUT = xinput;
+    if( xinput ) {
+        load( XINPUT, XInputGetState );
+        if( xinput_1_3 ) {
+            XInputSetState = XInputSetState_stub;
+        } else {
+            load( XINPUT, XInputSetState );
+        }
+
+        global_win32_input->thread =
+            CreateThread(
+                NULL, 0, win32_xinput_thread,
+                (void*)&global_win32_input->thread_exit, 0, 0 );
+        if( !global_win32_input->thread ) {
+            win32_error_message( GetLastError(), "failed to create Xinput thread!" );
+            return false;
+        }
     }
 
-    HMODULE module = GetModuleHandleA( NULL );
+    /* create input window */ {
+        WNDCLASSEXW class;
+        memset( &class, 0, sizeof(class) );
+        class.cbSize        = sizeof(class);
+        class.lpszClassName = WIN32_INPUT_WINDOW_CLASS;
+        class.hInstance     = module;
+        class.lpfnWndProc   = win32_winproc_input;
 
-    /* create window */ {
-        WNDCLASSEXA message_class   = global_win32_state->def_wndclass;
-        message_class.lpszClassName = "LibMediaMessageWindowClass";
-        message_class.lpfnWndProc   = win32_message_proc;
-
-        if( !RegisterClassExA( &message_class ) ) {
-            win32_error( "failed to register message window class!" );
+        if( !RegisterClassExW( &class ) ) {
+            win32_error_message( GetLastError(),
+                "input_subsystem_initialize: failed to register input window!" );
             return false;
         }
 
-        HWND message_window = CreateWindowExA(
-            0, message_class.lpszClassName, NULL,
-            0, 0, 0, 0, 0, HWND_MESSAGE, NULL, module, NULL  );
-        if( !message_window ) {
-            win32_error( "failed to create message window!" );
-            UnregisterClassA( message_class.lpszClassName, module );
+        global_win32_input->hwnd = CreateWindowExW(
+            0, WIN32_INPUT_WINDOW_CLASS, NULL,
+            0, 0, 0, 0, 0, HWND_MESSAGE, NULL, module, NULL );
+
+        if( !global_win32_input->hwnd ) {
+            win32_error_message(
+                GetLastError(),
+                "input_subsystem_initialize: failed to create input window!" );
+            UnregisterClassW( WIN32_INPUT_WINDOW_CLASS, module );
             return false;
         }
-
-        global_media_win32_input_state->msg_wnd       = message_window;
-        global_media_win32_input_state->msg_wnd_class = message_class;
     }
 
-    /* Register Raw Input */ {
+    /* register raw input */ {
         RAWINPUTDEVICE rid[2];
+        memset( rid, 0, sizeof(rid) );
         rid[0].usUsagePage = HID_USAGE_PAGE_GENERIC;
         rid[0].usUsage     = HID_USAGE_GENERIC_MOUSE;
         rid[0].dwFlags     = RIDEV_INPUTSINK;
-        rid[0].hwndTarget  = global_media_win32_input_state->msg_wnd;
+        rid[0].hwndTarget  = global_win32_input->hwnd;
 
         rid[1].usUsagePage = HID_USAGE_PAGE_GENERIC;
         rid[1].usUsage     = HID_USAGE_GENERIC_KEYBOARD;
-        rid[1].dwFlags     = RIDEV_INPUTSINK | RIDEV_NOLEGACY;
-        rid[1].hwndTarget  = global_media_win32_input_state->msg_wnd;
-        if( RegisterRawInputDevices(
-            rid, static_array_len(rid), sizeof( rid[0] )
-        ) == FALSE ) {
-            win32_error( "failed to register raw input devices!" );
-            DestroyWindow( global_media_win32_input_state->msg_wnd );
-            UnregisterClassA(
-                global_media_win32_input_state->msg_wnd_class.lpszClassName, module );
+        rid[1].dwFlags     = RIDEV_INPUTSINK;
+        rid[1].hwndTarget  = global_win32_input->hwnd;
+
+        if( !RegisterRawInputDevices(
+            rid, sizeof(rid) / sizeof(rid[0]), sizeof(rid[0]) 
+        ) ) {
+            win32_error_message(
+                GetLastError(),
+                "input_subsystem_initialize: failed to register input devices!" );
+            DestroyWindow( global_win32_input->hwnd );
+            UnregisterClassW( WIN32_INPUT_WINDOW_CLASS, module );
             return false;
         }
     }
 
+    #undef load
     return true;
 }
-attr_media_api void media_input_update(void) {
-    media_assert(
-        global_media_win32_input_state,
-        "Attempted to update media input without "
-        "first initializing media input!" );
+attr_media_api void input_subsystem_shutdown(void) {
+    InterlockedIncrement( &global_win32_input->thread_exit );
+    // NOTE(alicia): wait for xinput thread to return.
+    for( ;; ) {
+        MemoryBarrier();
+        if( InterlockedCompareExchange(
+            &global_win32_input->thread_exit,
+            global_win32_input->thread_exit, 2
+        ) == 2 ) {
+            break;
+        }
+    }
+    MemoryBarrier();
 
-    XINPUT_STATE xinput;
-    for( u32 i = 0; i < INPUT_GAMEPAD_COUNT; ++i ) {
-        // TODO(alicia): avoid XInputGetState stall on inactive gamepad!
-        if( XInputGetState( i, &xinput ) != ERROR_SUCCESS ) {
-            global_media_win32_input_state->active_gamepads[i] = false;
-            global_media_win32_input_state->gamepad_rumble[i][0] = 0;
-            global_media_win32_input_state->gamepad_rumble[i][1] = 0;
+    CloseHandle( global_win32_input->thread );
+
+    HMODULE module = GetModuleHandleW(0);
+    DestroyWindow( global_win32_input->hwnd );
+    UnregisterClassW( WIN32_INPUT_WINDOW_CLASS, module );
+
+    memset( global_win32_input, 0, sizeof(*global_win32_input) );
+    global_win32_input = NULL;
+}
+attr_media_api void input_subsystem_update(void) {
+    XINPUT_STATE xinput_state;
+    memset( &xinput_state, 0, sizeof(xinput_state) );
+    for( DWORD i = 0; i < XUSER_MAX_COUNT; ++i ) {
+        if( !global_win32_input->gp_connected[i] ) {
             continue;
         }
-        global_media_win32_input_state->active_gamepads[i] = true;
-        InputGamepadState* state =
-            (InputGamepadState*)global_media_win32_input_state->gp + i;
 
-        XINPUT_GAMEPAD* pad = &xinput.Gamepad;
+        DWORD res = XInputGetState( i, &xinput_state );
+        if( res == ERROR_DEVICE_NOT_CONNECTED ) {
+            global_win32_input->gp_connected[i] = false;
+            memset(
+                global_win32_input->rumble[i],
+                0, sizeof(global_win32_input->rumble[0]));
+            continue;
+        }
 
-        state->buttons = bitfield_clear( pad->wButtons,
-            INPUT_GAMEPAD_EXT_BUTTON_TRIGGER_LEFT |
-            INPUT_GAMEPAD_EXT_BUTTON_TRIGGER_RIGHT );
+        XINPUT_GAMEPAD* xgp = &xinput_state.Gamepad;
+        GamepadState*   gp  = global_win32_input->gp + i;
 
-        state->buttons |= pad->bLeftTrigger > (U8_MAX / 2) ?
-            INPUT_GAMEPAD_EXT_BUTTON_TRIGGER_LEFT : 0;
-        state->buttons |= pad->bRightTrigger > (U8_MAX / 2) ?
-            INPUT_GAMEPAD_EXT_BUTTON_TRIGGER_RIGHT : 0;
+        gp->buttons       = xgp->wButtons;
+        gp->stick_left_x  = xgp->sThumbLX;
+        gp->stick_left_y  = xgp->sThumbLY;
+        gp->stick_right_x = xgp->sThumbRX;
+        gp->stick_right_y = xgp->sThumbRY;
+        gp->trigger_left  = xgp->bLeftTrigger;
+        gp->trigger_right = xgp->bRightTrigger;
 
-        state->trigger_left  = pad->bLeftTrigger;
-        state->trigger_right = pad->bRightTrigger;
-
-        state->stick_left_x  = pad->sThumbLX;
-        state->stick_left_y  = pad->sThumbLY;
-        state->stick_right_x = pad->sThumbRX;
-        state->stick_right_y = pad->sThumbRY;
+        memset( &xinput_state, 0, sizeof(xinput_state) );
     }
 
-    global_media_win32_input_state->active = win32_get_active_window();
-
-    if( global_media_win32_input_state->active != NULL ) {
-        POINT new_pos;
-        GetCursorPos( &new_pos );
+    HWND focused = win32_get_focused_window();
+    POINT point;
+    GetCursorPos( &point );
+    if( focused ) {
         if(
-            new_pos.x != global_media_win32_input_state->abs_x ||
-            new_pos.y != global_media_win32_input_state->abs_y
+            point.x != global_win32_input->mb_x ||
+            point.y != global_win32_input->mb_y
         ) {
-            PostMessageA(
-                global_media_win32_input_state->active, WM_INPUT_MOUSE_POSITION,
-                win32_make_mouse_pos_wparam( new_pos.x ),
-                win32_make_mouse_pos_lparam( new_pos.y ) );
-            global_media_win32_input_state->abs_x = new_pos.x;
-            global_media_win32_input_state->abs_y = new_pos.y;
+            PostMessageW(
+                focused, WM_CUSTOM_MOUSE_POS,
+                win32_mouse_x_to_wparam( point.x ),
+                win32_mouse_y_to_lparam( point.y ) );
         }
     }
 
-    MSG message = {};
-    // win32_message_proc should only process WM_INPUT messages.
-    while( PeekMessageA(
-        &message, global_media_win32_input_state->msg_wnd,
+    global_win32_input->mb_x = point.x;
+    global_win32_input->mb_y = point.y;
+
+    global_win32_input->mb_dx = 0;
+    global_win32_input->mb_dy = 0;
+
+    MSG message;
+    memset( &message, 0, sizeof(message) );
+    while( PeekMessageW(
+        &message, global_win32_input->hwnd,
         WM_INPUT, WM_INPUT, PM_REMOVE
     ) ) {
-        DispatchMessageA( &message );
+        DispatchMessageW( &message );
+    }
+}
+attr_media_api KeyboardMod input_keyboard_query_mod(void) {
+    return global_win32_state->mod;
+}
+attr_media_api m_bool32 input_keyboard_query_key( KeyboardCode keycode ) {
+    return keyboard_state_get_key( &global_win32_input->kb, keycode );
+}
+attr_media_api void input_keyboard_copy_state( KeyboardState* out_state ) {
+    memcpy( out_state, &global_win32_input->kb, sizeof(*out_state) );
+}
+attr_media_api MouseButton input_mouse_query_buttons(void) {
+    return global_win32_state->mb;
+}
+attr_media_api void input_mouse_query_position( m_int32* out_x, m_int32* out_y ) {
+    *out_x = global_win32_input->mb_x;
+    *out_y = global_win32_input->mb_y;
+}
+attr_media_api void input_mouse_position_to_client(
+    SurfaceHandle* surface, m_int32* in_out_x, m_int32* in_out_y
+) {
+    HWND hwnd = (HWND)surface_get_platform_handle( surface );
+    POINT pos;
+    pos.x = *in_out_x;
+    pos.y = *in_out_y;
+    ScreenToClient( hwnd, &pos );
+
+    m_int32 w, h;
+    surface_query_dimensions( surface, &w, &h );
+
+    if( pos.x < 0 ) {
+        pos.x = 0;
+    }
+    if( pos.x > w ) {
+        pos.x = w;
+    }
+    if( pos.y < 0 ) {
+        pos.y = 0;
+    }
+    if( pos.y > h ) {
+        pos.y = h;
     }
 
+    *in_out_x = pos.x;
+    *in_out_y = h - pos.y;
 }
-attr_media_api void media_input_shutdown(void) {
-    if( !global_media_win32_input_state ) {
-        return;
-    }
-    HMODULE module = GetModuleHandleA( NULL );
-    DestroyWindow( global_media_win32_input_state->msg_wnd );
-    UnregisterClassA(
-        global_media_win32_input_state->msg_wnd_class.lpszClassName, module );
-    memory_zero(
-        (void*)global_media_win32_input_state,
-        sizeof(*global_media_win32_input_state) );
-    global_media_win32_input_state = NULL;
+attr_media_api void input_mouse_query_delta( m_int32* out_x, m_int32* out_y ) {
+    *out_x = global_win32_input->mb_dx;
+    *out_y = global_win32_input->mb_dy;
 }
-attr_media_api InputKeymod media_keyboard_query_mod(void) {
-    media_assert(
-        global_media_win32_input_state,
-        "Attempted to query key mod state without "
-        "first initializing media input!" );
-    return global_media_win32_input_state->keymod;
-}
-attr_media_api b32 media_keyboard_query_key( InputKeycode key ) {
-    media_assert(
-        global_media_win32_input_state,
-        "Attempted to query key state without "
-        "first initializing media input!" );
-    return packed_bool_get( global_media_win32_input_state->keys, key );
-}
-attr_media_api void media_keyboard_query_keyboard(
-    b8 out_keyboard[packed_bool_memory_requirement(INPUT_KEYCODE_COUNT)]
+attr_media_api m_bool32 input_gamepad_query_state(
+    m_uint32 index, GamepadState* out_state
 ) {
-    media_assert(
-        global_media_win32_input_state,
-        "Attempted to query keyboard state without "
-        "first initializing media input!" );
-    memory_copy(
-        out_keyboard, (const void*)global_media_win32_input_state->keys,
-        sizeof(global_media_win32_input_state->keys) );
-}
-attr_media_api InputMouseButton media_mouse_query_buttons(void) {
-    media_assert(
-        global_media_win32_input_state,
-        "Attempted to query mouse button state without "
-        "first initializing media input!" );
-    return global_media_win32_input_state->mb;
-}
-attr_media_api void media_mouse_query_absolute( i32* out_x, i32* out_y ) {
-    media_assert(
-        global_media_win32_input_state,
-        "Attempted to query mouse absolute position without "
-        "first initializing media input!" );
-    if( out_x ) {
-        *out_x = global_media_win32_input_state->abs_x;
-    }
-    if( out_y ) {
-        *out_y = global_media_win32_input_state->abs_y;
-    }
-}
-attr_media_api void media_mouse_query_delta( i32* out_x, i32* out_y ) {
-    media_assert(
-        global_media_win32_input_state,
-        "Attempted to query mouse delta position without "
-        "first initializing media input!" );
-    if( out_x ) {
-        *out_x = global_media_win32_input_state->del_x;
-    }
-    if( out_y ) {
-        *out_y = global_media_win32_input_state->del_y;
-    }
-}
-attr_media_api b32 media_gamepad_query_state(
-    u32 index, InputGamepadState* out_state
-) {
-    media_assert(
-        global_media_win32_input_state,
-        "Attempted to query gamepad state without "
-        "first initializing media input!" );
-    media_assert(
-        index < INPUT_GAMEPAD_COUNT,
-        "Attempted to query gamepad state at an invalid index! Index: {u}", index );
-    if( !global_media_win32_input_state->active_gamepads[index] ) {
+    if( index >= XUSER_MAX_COUNT || !global_win32_input->gp_connected[index] ) {
         return false;
     }
 
-    memory_copy( out_state,
-        (const void*)(global_media_win32_input_state->gp + index),
-        sizeof(*out_state) );
+    memcpy( out_state, global_win32_input->gp + index, sizeof(*out_state) );
     return true;
 }
-attr_media_api void media_gamepad_set_rumble(
-    u32 index, u16 motor_left, u16 motor_right
+attr_media_api m_bool32 input_gamepad_rumble_set(
+    m_uint32 index, m_uint16 motor_left, m_uint16 motor_right
 ) {
-    media_assert(
-        global_media_win32_input_state,
-        "Attempted to set gamepad rumble without "
-        "first initializing media input!" );
-    media_assert(
-        index < INPUT_GAMEPAD_COUNT,
-        "Attempted to set rumble for gamepad at an invalid index! Index: {u}", index );
-#if defined(MEDIA_ENABLE_LOGGING)
-    if( !global_media_win32_input_state->active_gamepads[index] ) {
-        media_warn(
-            "Attempted to set rumble for gamepad "
-            "'{u}' but it's not available!", index );
-        return;
+    if( index >= XUSER_MAX_COUNT || !global_win32_input->gp_connected[index] ) {
+        return false;
     }
-#endif
-    global_media_win32_input_state->gamepad_rumble[index][0] = motor_left;
-    global_media_win32_input_state->gamepad_rumble[index][1] = motor_right;
-
-    XINPUT_VIBRATION vib = { motor_left, motor_right };
-    XInputSetState( index, &vib );
-}
-attr_media_api void media_gamepad_query_rumble(
-    u32 index, u16* out_motor_left, u16* out_motor_right
-) {
-    media_assert(
-        global_media_win32_input_state,
-        "Attempted to set gamepad rumble without "
-        "first initializing media input!" );
-    media_assert(
-        index < INPUT_GAMEPAD_COUNT,
-        "Attempted to set rumble for gamepad at an invalid index! Index: {u}", index );
-
-    if( out_motor_left ) {
-        *out_motor_left = global_media_win32_input_state->gamepad_rumble[index][0];
+    XINPUT_VIBRATION vib;
+    vib.wLeftMotorSpeed  = motor_left;
+    vib.wRightMotorSpeed = motor_right;
+    if( XInputSetState( index, &vib ) == ERROR_DEVICE_NOT_CONNECTED ) {
+        global_win32_input->gp_connected[index] = false;
+        return false;
     }
-    if( out_motor_right ) {
-        *out_motor_right = global_media_win32_input_state->gamepad_rumble[index][1];
-    }
+    return true;
 }
 
-LRESULT win32_message_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
-    volatile struct Win32InputState* state = global_media_win32_input_state;
-
-    UINT dwSize = sizeof(RAWINPUT);
+LRESULT win32_winproc_input( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
     BYTE lpb[sizeof(RAWINPUT)];
+    memset( lpb, 0, sizeof(lpb) );
+    UINT pcbSize = sizeof(lpb);
 
-    GetRawInputData(
-        (HRAWINPUT)lparam, RID_INPUT,
-        lpb, &dwSize, sizeof(RAWINPUTHEADER) );
+    UINT res = GetRawInputData(
+        (HRAWINPUT)lparam, RID_INPUT, lpb, &pcbSize, sizeof(RAWINPUTHEADER) );
+    if( res == (UINT)-1 ) {
+        return DefWindowProcW( hwnd, msg, wparam, lparam );
+    }
 
     RAWINPUT* raw = (RAWINPUT*)lpb;
     switch( raw->header.dwType ) {
         case RIM_TYPEKEYBOARD: {
             RAWKEYBOARD* kb = &raw->data.keyboard;
+
             if( kb->MakeCode == KEYBOARD_OVERRUN_MAKE_CODE ) {
                 break;
             }
-            u16 scan = kb->MakeCode;
+            /* m_uint16 scan = kb->MakeCode; */
+            m_uint16 vk   = kb->VKey;
 
-            b32 up, down;
-            up   =  bitfield_check( kb->Flags, (1 << 0) );
-            down = !bitfield_check( kb->Flags, (1 << 0) );
+            m_bool32 is_e0 = ((kb->Flags & RI_KEY_E0) != 0);
+            m_bool32 is_e1 = ((kb->Flags & RI_KEY_E1) != 0);
+            unused(is_e1);
 
-            u16 scan_translate = scan | ((kb->Flags & RI_KEY_E0) ? 0xE000 : 0);
-            scan_translate |= (kb->Flags & RI_KEY_E1) ? 0xE100 : 0;
+            m_uint16 vk_translate   = vk;
 
-            u16 vk = kb->VKey;
+            m_bool32 down           = !(kb->Flags & RI_KEY_BREAK);
+            m_uint32 scan_translate = MapVirtualKeyW( vk, MAPVK_VK_TO_VSC );
+
             switch( vk ) {
-                case VK_SHIFT:
-                case VK_CONTROL:
-                case VK_MENU:
-                    vk = LOWORD( MapVirtualKeyA(
-                        scan_translate, MAPVK_VSC_TO_VK_EX ) );
-                    if( kb->Flags == 0x0 || kb->Flags == 0x2 ) {
-                        down = true;
-                    } else if( kb->Flags == 0x1 || kb->Flags == 0x3 ) {
-                        up = true;
+                case VK_PAUSE: {
+                    scan_translate = 0x45;
+                } break;
+                case VK_CONTROL: {
+                    if( is_e0 ) {
+                        vk_translate = VK_RCONTROL;
+                    } else {
+                        vk_translate = VK_LCONTROL;
                     }
-                    break;
-            }
 
-            if( down ) {
-                switch( kb->VKey ) {
-                    case VK_SHIFT: {
-                        state->keymod |= INPUT_KEYMOD_SHIFT;
-                    } break;
-                    case VK_CONTROL: {
-                        state->keymod |= INPUT_KEYMOD_CTRL;
-                    } break;
-                    case VK_MENU: {
-                        state->keymod |= INPUT_KEYMOD_ALT;
-                    } break;
-                    case VK_CAPITAL: {
-                        state->keymod =
-                            bitfield_check(
-                                state->keymod, INPUT_KEYMOD_CAPSLK ) ?
-                            bitfield_clear(
-                                state->keymod, INPUT_KEYMOD_CAPSLK ) :
-                            bitfield_set(
-                                state->keymod, INPUT_KEYMOD_CAPSLK );
-                    } break;
-                    case VK_SCROLL: {
-                        state->keymod =
-                            bitfield_check(
-                                state->keymod, INPUT_KEYMOD_SCRLK ) ?
-                            bitfield_clear(
-                                state->keymod, INPUT_KEYMOD_SCRLK ) :
-                            bitfield_set(
-                                state->keymod, INPUT_KEYMOD_SCRLK );
-                    } break;
-                    case VK_NUMLOCK: {
-                        state->keymod =
-                            bitfield_check(
-                                state->keymod, INPUT_KEYMOD_NUMLK ) ?
-                            bitfield_clear(
-                                state->keymod, INPUT_KEYMOD_NUMLK ) :
-                            bitfield_set(
-                                state->keymod, INPUT_KEYMOD_NUMLK );
-                    } break;
-                    default: break;
-                }
-            } else if( up ) {
-                switch( kb->VKey ) {
-                    case VK_SHIFT: {
-                        state->keymod =
-                            bitfield_clear(
-                                state->keymod, INPUT_KEYMOD_SHIFT );
-                    } break;
-                    case VK_CONTROL: {
-                        state->keymod =
-                            bitfield_clear(
-                                state->keymod, INPUT_KEYMOD_CTRL );
-                    } break;
-                    case VK_MENU: {
-                        state->keymod =
-                            bitfield_clear(
-                                state->keymod, INPUT_KEYMOD_ALT );
-                    } break;
-                    default: break;
-                }
-                
-            }
-
-            InputKeycode key  = win32_vk_to_keycode( vk );
-            b32 send_keyboard = true;
-
-            if( down ) {
-                if( packed_bool_get( state->keys, key ) ) {
-                    send_keyboard = false;
-                }
-                packed_bool_set( (b8*)state->keys, key, true );
-            } else if( up ) {
-                packed_bool_set( (b8*)state->keys, key, false );
-            } else {
-                send_keyboard = false;
-            }
-            if( key == INPUT_KEYCODE_UNKNOWN ) {
-                send_keyboard = false;
-            }
-
-            if( down ) {
-                state->keys_vk[vk] = 1 << 7;
-            } else if( up ) {
-                state->keys_vk[vk] = 0;
-            }
-            switch( vk ) {
-                case VK_SHIFT:
-                case VK_LSHIFT:
-                case VK_RSHIFT: {
-                    state->keys_vk[VK_SHIFT]  = state->keys_vk[vk];
-                    state->keys_vk[VK_LSHIFT] = state->keys_vk[vk];
-                    state->keys_vk[VK_RSHIFT] = state->keys_vk[vk];
+                    global_win32_state->mod = down ?
+                        (global_win32_state->mod | KBMOD_CTRL) :
+                        (global_win32_state->mod & ~KBMOD_CTRL);
                 } break;
-                case VK_CONTROL:
-                case VK_LCONTROL:
-                case VK_RCONTROL: {
-                    state->keys_vk[VK_CONTROL]  = state->keys_vk[vk];
-                    state->keys_vk[VK_LCONTROL] = state->keys_vk[vk];
-                    state->keys_vk[VK_RCONTROL] = state->keys_vk[vk];
+                case VK_MENU: {
+                    if( is_e0 ) {
+                        vk_translate = VK_RMENU;
+                    } else {
+                        vk_translate = VK_LMENU;
+                    }
+                    global_win32_state->mod = down ?
+                        (global_win32_state->mod | KBMOD_ALT) :
+                        (global_win32_state->mod & ~KBMOD_ALT);
                 } break;
-                case VK_MENU:
-                case VK_LMENU:
-                case VK_RMENU: {
-                    state->keys_vk[VK_MENU]  = state->keys_vk[vk];
-                    state->keys_vk[VK_LMENU] = state->keys_vk[vk];
-                    state->keys_vk[VK_RMENU] = state->keys_vk[vk];
+                case VK_SHIFT: {
+                    vk_translate = MapVirtualKeyW( scan_translate, MAPVK_VSC_TO_VK_EX );
+
+                    global_win32_state->mod = down ?
+                        (global_win32_state->mod | KBMOD_SHIFT) :
+                        (global_win32_state->mod & ~KBMOD_SHIFT);
                 } break;
                 case VK_CAPITAL: {
-                    if( bitfield_check(
-                        state->keymod, INPUT_KEYMOD_CAPSLK
-                    ) ) {
-                        state->keys_vk[vk] |= 1 << 0;
-                    } else {
-                        state->keys_vk[vk] &= ~(1 << 0);
+                    if( down ) {
+                        global_win32_state->mod =
+                            (global_win32_state->mod & KBMOD_CAPSLK) ?
+                                (global_win32_state->mod & ~KBMOD_CAPSLK) :
+                                (global_win32_state->mod |  KBMOD_CAPSLK);
                     }
                 } break;
-                default: break;
+                case VK_SCROLL: {
+                    if( down ) {
+                        global_win32_state->mod =
+                            (global_win32_state->mod & KBMOD_SCRLK) ?
+                                (global_win32_state->mod & ~KBMOD_SCRLK) :
+                                (global_win32_state->mod |  KBMOD_SCRLK);
+                    }
+                } break;
+                case VK_NUMLOCK: {
+                    scan_translate = (MapVirtualKeyW( vk, MAPVK_VK_TO_VSC ) | 0x100);
+                    if( down ) {
+                        global_win32_state->mod =
+                            (global_win32_state->mod & KBMOD_NUMLK) ?
+                                (global_win32_state->mod & ~KBMOD_NUMLK) :
+                                (global_win32_state->mod |  KBMOD_NUMLK);
+                    }
+                } break;
             }
 
-            if( state->active ) {
-                if( send_keyboard ) {
-                    WPARAM w = win32_make_key_wparam( key, down );
-                    PostMessageA( state->active, WM_INPUT_KEYBOARD, w, 0 );
-                }
-                if( down ) {
-                    WPARAM w = win32_make_text_wparam( vk, scan_translate );
-                    LPARAM l = win32_make_text_lparam( state->keys_vk );
-                    PostMessageA(
-                        state->active, WM_INPUT_KEYBOARD_TEXT, w, l );
-                }
+            KeyboardCode code = vk_to_keyboard_code( vk_translate );
+
+            keyboard_state_set_key( &global_win32_input->kb, code, down );
+
+            HWND focused = win32_get_focused_window();
+            if( focused ) {
+                WPARAM _wparam = win32_key_to_wparam( code, down );
+                PostMessageW(
+                    focused, WM_CUSTOM_KEYBOARD, _wparam, 0 );
             }
         } break;
         case RIM_TYPEMOUSE: {
             RAWMOUSE* mb = &raw->data.mouse;
-            WPARAM rel_x = win32_make_mouse_pos_wparam( mb->lLastX );
-            LPARAM rel_y = win32_make_mouse_pos_lparam( mb->lLastY );
+            WPARAM dx = win32_mouse_x_to_wparam( mb->lLastX );
+            LPARAM dy = win32_mouse_y_to_lparam( mb->lLastY );
 
-            u16 flags = mb->usButtonFlags;
-            u8 buttons_state = state->mb;
-            if( bitfield_check( flags, RI_MOUSE_LEFT_BUTTON_DOWN ) ) {
-                buttons_state |= INPUT_MOUSE_BUTTON_LEFT;
-            } else if( bitfield_check( flags, RI_MOUSE_LEFT_BUTTON_UP ) ) {
-                buttons_state &= ~INPUT_MOUSE_BUTTON_LEFT;
-            }
-            if( bitfield_check( flags, RI_MOUSE_RIGHT_BUTTON_DOWN ) ) {
-                buttons_state |= INPUT_MOUSE_BUTTON_RIGHT;
-            } else if( bitfield_check( flags, RI_MOUSE_RIGHT_BUTTON_UP ) ) {
-                buttons_state &= ~INPUT_MOUSE_BUTTON_RIGHT;
-            }
-            if( bitfield_check( flags, RI_MOUSE_MIDDLE_BUTTON_DOWN ) ) {
-                buttons_state |= INPUT_MOUSE_BUTTON_MIDDLE;
-            } else if( bitfield_check( flags, RI_MOUSE_MIDDLE_BUTTON_UP ) ) {
-                buttons_state &= ~INPUT_MOUSE_BUTTON_MIDDLE;
-            }
-            if( bitfield_check( flags, RI_MOUSE_BUTTON_4_DOWN ) ) {
-                buttons_state |= INPUT_MOUSE_BUTTON_EXTRA_1;
-            } else if( bitfield_check( flags, RI_MOUSE_BUTTON_4_UP ) ) {
-                buttons_state &= ~INPUT_MOUSE_BUTTON_EXTRA_1;
-            }
-            if( bitfield_check( flags, RI_MOUSE_BUTTON_5_DOWN ) ) {
-                buttons_state |= INPUT_MOUSE_BUTTON_EXTRA_2;
-            } else if( bitfield_check( flags, RI_MOUSE_BUTTON_5_UP ) ) {
-                buttons_state &= ~INPUT_MOUSE_BUTTON_EXTRA_2;
+            m_uint16    flags = mb->usButtonFlags;
+            MouseButton btn   = global_win32_state->mb;
+
+            if( (flags & RI_MOUSE_LEFT_BUTTON_DOWN) == RI_MOUSE_LEFT_BUTTON_DOWN ) {
+                btn |= MB_LEFT;
+            } else if( (flags & RI_MOUSE_LEFT_BUTTON_UP) == RI_MOUSE_LEFT_BUTTON_UP ) {
+                btn &= ~MB_LEFT;
             }
 
-            u8 buttons_changed = state->mb ^ buttons_state;
-            state->mb = buttons_state;
-
-            i16 scroll = signum( rcast( i16, &mb->usButtonData ) );
-            WPARAM buttons = win32_make_mouse_button_wparam(
-                buttons_state, buttons_changed,
-                scroll, bitfield_check( mb->usButtonFlags, RI_MOUSE_HWHEEL ) );
-
-            if( state->active ) {
-                PostMessageA(
-                    state->active, WM_INPUT_MOUSE_POSITION_RELATIVE, rel_x, rel_y );
-            }
-            if( buttons_changed || scroll ) {
-                PostMessageA(
-                    state->active, WM_INPUT_MOUSE_BUTTON,
-                    buttons, 0 );
+            if( (flags & RI_MOUSE_RIGHT_BUTTON_DOWN) == RI_MOUSE_RIGHT_BUTTON_DOWN ) {
+                btn |= MB_RIGHT;
+            } else if(
+                (flags & RI_MOUSE_RIGHT_BUTTON_UP) == RI_MOUSE_RIGHT_BUTTON_UP
+            ) {
+                btn &= ~MB_RIGHT;
             }
 
-            state->del_x = rel_x;
-            state->del_y = rel_y;
+            if( (flags & RI_MOUSE_MIDDLE_BUTTON_DOWN) == RI_MOUSE_MIDDLE_BUTTON_DOWN ) {
+                btn |= MB_MIDDLE;
+            } else if(
+                (flags & RI_MOUSE_MIDDLE_BUTTON_UP) == RI_MOUSE_MIDDLE_BUTTON_UP 
+            ) {
+                btn &= ~MB_MIDDLE;
+            }
+
+            if( (flags & RI_MOUSE_BUTTON_4_DOWN) == RI_MOUSE_BUTTON_4_DOWN ) {
+                btn |= MB_EXTRA_1;
+            } else if( (flags & RI_MOUSE_BUTTON_4_UP) == RI_MOUSE_BUTTON_4_UP ) {
+                btn &= ~MB_EXTRA_1;
+            }
+
+            if( (flags & RI_MOUSE_BUTTON_5_DOWN) == RI_MOUSE_BUTTON_5_DOWN ) {
+                btn |= MB_EXTRA_2;
+            } else if( (flags & RI_MOUSE_BUTTON_5_UP) == RI_MOUSE_BUTTON_5_UP ) {
+                btn &= ~MB_EXTRA_2;
+            }
+
+            m_int16 scroll = *(m_int16*)&mb->usButtonData;
+            scroll = scroll < 0 ? -1 : 1;
+            m_bool32 scroll_hor = (flags & RI_MOUSE_HWHEEL) == RI_MOUSE_HWHEEL;
+
+            MouseButton delta = btn ^ global_win32_state->mb;
+            global_win32_state->mb = btn;
+
+            WPARAM buttons = win32_mouse_button_to_wparam(
+                btn, delta, scroll, scroll_hor );
+
+            global_win32_input->mb_dx = mb->lLastX;
+            global_win32_input->mb_dy = mb->lLastY;
+
+            HWND focused = win32_get_focused_window();
+            if( focused ) {
+                PostMessageW( focused, WM_CUSTOM_MOUSE_DEL, dx, dy );
+                PostMessageW( focused, WM_CUSTOM_MOUSE_BTN, buttons, 0 );
+            }
         } break;
+        default: break;
     }
 
-    if( GET_RAWINPUT_CODE_WPARAM( wparam ) == RIM_INPUT ) {
-        return DefWindowProcA( hwnd, msg, wparam, lparam );
+    if( GET_RAWINPUT_CODE_WPARAM(wparam) == RIM_INPUT ) {
+        return DefWindowProcW( hwnd, msg, wparam, lparam );
     }
     return 0;
 }
-
-attr_internal InputKeycode win32_vk_to_keycode( DWORD vk ) {
+DWORD keyboard_code_to_vk( KeyboardCode code ) {
+    switch( code ) {
+        case KB_BACKSPACE                 : return VK_BACK;
+        case KB_TAB                       : return VK_TAB;
+        case KB_ENTER                     : return VK_RETURN;
+        case KB_SHIFT_LEFT                : return VK_SHIFT;
+        case KB_SHIFT_RIGHT               : return VK_RSHIFT;
+        case KB_CONTROL_LEFT              : return VK_CONTROL;
+        case KB_CONTROL_RIGHT             : return VK_RCONTROL;
+        case KB_ALT_LEFT                  : return VK_MENU;
+        case KB_ALT_RIGHT                 : return VK_RMENU;
+        case KB_PAUSE                     : return VK_PAUSE;
+        case KB_CAPSLOCK                  : return VK_CAPITAL;
+        case KB_ESCAPE                    : return VK_ESCAPE;
+        case KB_SPACE                     : return VK_SPACE;
+        case KB_PAGE_UP                   : return VK_PRIOR;
+        case KB_PAGE_DOWN                 : return VK_NEXT;
+        case KB_END                       : return VK_END;
+        case KB_HOME                      : return VK_HOME;
+        case KB_ARROW_LEFT                : return VK_LEFT;
+        case KB_ARROW_UP                  : return VK_UP;
+        case KB_ARROW_RIGHT               : return VK_RIGHT;
+        case KB_ARROW_DOWN                : return VK_DOWN;
+        case KB_0 ... KB_9                : return (code - KB_0) + 0x30;
+        case KB_A ... KB_Z                : return (code - KB_A) + 0x41;
+        case KB_SUPER_LEFT                : return VK_LWIN;
+        case KB_SUPER_RIGHT               : return VK_RWIN;
+        case KB_PAD_0 ... KB_PAD_9        : return (code - KB_PAD_0) + VK_NUMPAD0;
+        case KB_F1 ... KB_F24             : return (code - KB_F1) + VK_F1;
+        case KB_NUM_LOCK                  : return VK_NUMLOCK;
+        case KB_SCROLL_LOCK               : return VK_SCROLL;
+        case KB_SEMICOLON                 : return VK_OEM_1;
+        case KB_EQUALS                    : return VK_OEM_PLUS;
+        case KB_COMMA                     : return VK_OEM_COMMA;
+        case KB_MINUS                     : return VK_OEM_MINUS;
+        case KB_PERIOD                    : return VK_OEM_PERIOD;
+        case KB_SLASH                     : return VK_OEM_2;
+        case KB_BACKTICK                  : return VK_OEM_3;
+        case KB_BRACKET_LEFT              : return VK_OEM_4;
+        case KB_BACKSLASH                 : return VK_OEM_5;
+        case KB_BRACKET_RIGHT             : return VK_OEM_6;
+        case KB_QUOTE                     : return VK_OEM_7;
+        case KB_PRINT_SCREEN              : return VK_SNAPSHOT;
+        case KB_DELETE                    : return VK_DELETE;
+        case KB_PAD_ADD                   : return VK_ADD;
+        case KB_PAD_MULTIPLY              : return VK_MULTIPLY;
+        case KB_PAD_SUBTRACT              : return VK_SUBTRACT;
+        case KB_PAD_DIVIDE                : return VK_DIVIDE;
+        case KB_PAD_DOT                   : return VK_DECIMAL;
+        case KB_INSERT                    : return VK_INSERT;
+        case KB_RIGHT_CLICK_MENU          : return VK_APPS;
+        default: return 0;
+    }
+}
+KeyboardCode vk_to_keyboard_code( DWORD vk ) {
     switch( vk ) {
-        case VK_BACK                   : return INPUT_KEYCODE_BACKSPACE;
-        case VK_TAB                    : return INPUT_KEYCODE_TAB;
-        case VK_RETURN                 : return INPUT_KEYCODE_ENTER;
+        case VK_BACK                   : return KB_BACKSPACE;
+        case VK_TAB                    : return KB_TAB;
+        case VK_RETURN                 : return KB_ENTER;
         case VK_LSHIFT:
-        case VK_SHIFT                  : return INPUT_KEYCODE_SHIFT_LEFT;
-        case VK_RSHIFT                 : return INPUT_KEYCODE_SHIFT_RIGHT;
+        case VK_SHIFT                  : return KB_SHIFT_LEFT;
+        case VK_RSHIFT                 : return KB_SHIFT_RIGHT;
         case VK_LCONTROL:
-        case VK_CONTROL                : return INPUT_KEYCODE_CONTROL_LEFT;
-        case VK_RCONTROL               : return INPUT_KEYCODE_CONTROL_RIGHT;
+        case VK_CONTROL                : return KB_CONTROL_LEFT;
+        case VK_RCONTROL               : return KB_CONTROL_RIGHT;
         case VK_LMENU:
-        case VK_MENU                   : return INPUT_KEYCODE_ALT_LEFT;
-        case VK_RMENU                  : return INPUT_KEYCODE_ALT_RIGHT;
-        case VK_PAUSE                  : return INPUT_KEYCODE_PAUSE;
-        case VK_CAPITAL                : return INPUT_KEYCODE_CAPSLOCK;
-        case VK_ESCAPE                 : return INPUT_KEYCODE_ESCAPE;
-        case VK_SPACE                  : return INPUT_KEYCODE_SPACE;
-        case VK_PRIOR                  : return INPUT_KEYCODE_PAGE_UP;
-        case VK_NEXT                   : return INPUT_KEYCODE_PAGE_DOWN;
-        case VK_END                    : return INPUT_KEYCODE_END;
-        case VK_HOME                   : return INPUT_KEYCODE_HOME;
-        case VK_LEFT                   : return INPUT_KEYCODE_ARROW_LEFT;
-        case VK_UP                     : return INPUT_KEYCODE_ARROW_UP;
-        case VK_RIGHT                  : return INPUT_KEYCODE_ARROW_RIGHT;
-        case VK_DOWN                   : return INPUT_KEYCODE_ARROW_DOWN;
-        case 0x30 ... 0x39             : return (vk - 0x30) + INPUT_KEYCODE_0;
-        case 0x41 ... 0x5A             : return (vk - 0x41) + INPUT_KEYCODE_A;
-        case VK_LWIN                   : return INPUT_KEYCODE_SUPER_LEFT;
-        case VK_RWIN                   : return INPUT_KEYCODE_SUPER_RIGHT;
-        case VK_NUMPAD0 ... VK_NUMPAD9 : return (vk - VK_NUMPAD0) + INPUT_KEYCODE_PAD_0;
-        case VK_F1 ... VK_F24          : return (vk - VK_F1) + INPUT_KEYCODE_F1;
-        case VK_NUMLOCK                : return INPUT_KEYCODE_NUM_LOCK;
-        case VK_SCROLL                 : return INPUT_KEYCODE_SCROLL_LOCK;
-        case VK_OEM_1                  : return INPUT_KEYCODE_SEMICOLON;
-        case VK_OEM_PLUS               : return INPUT_KEYCODE_EQUALS;
-        case VK_OEM_COMMA              : return INPUT_KEYCODE_COMMA;
-        case VK_OEM_MINUS              : return INPUT_KEYCODE_MINUS;
-        case VK_OEM_PERIOD             : return INPUT_KEYCODE_PERIOD;
-        case VK_OEM_2                  : return INPUT_KEYCODE_SLASH;
-        case VK_OEM_3                  : return INPUT_KEYCODE_BACKTICK;
-        case VK_OEM_4                  : return INPUT_KEYCODE_BRACKET_LEFT;
-        case VK_OEM_5                  : return INPUT_KEYCODE_BACKSLASH;
-        case VK_OEM_6                  : return INPUT_KEYCODE_BRACKET_RIGHT;
-        case VK_OEM_7                  : return INPUT_KEYCODE_QUOTE;
-        default                        : return INPUT_KEYCODE_UNKNOWN;
+        case VK_MENU                   : return KB_ALT_LEFT;
+        case VK_RMENU                  : return KB_ALT_RIGHT;
+        case VK_PAUSE                  : return KB_PAUSE;
+        case VK_CAPITAL                : return KB_CAPSLOCK;
+        case VK_ESCAPE                 : return KB_ESCAPE;
+        case VK_SPACE                  : return KB_SPACE;
+        case VK_PRIOR                  : return KB_PAGE_UP;
+        case VK_NEXT                   : return KB_PAGE_DOWN;
+        case VK_END                    : return KB_END;
+        case VK_HOME                   : return KB_HOME;
+        case VK_LEFT                   : return KB_ARROW_LEFT;
+        case VK_UP                     : return KB_ARROW_UP;
+        case VK_RIGHT                  : return KB_ARROW_RIGHT;
+        case VK_DOWN                   : return KB_ARROW_DOWN;
+        case 0x30 ... 0x39             : return (vk - 0x30) + KB_0;
+        case 0x41 ... 0x5A             : return (vk - 0x41) + KB_A;
+        case VK_LWIN                   : return KB_SUPER_LEFT;
+        case VK_RWIN                   : return KB_SUPER_RIGHT;
+        case VK_NUMPAD0 ... VK_NUMPAD9 : return (vk - VK_NUMPAD0) + KB_PAD_0;
+        case VK_F1 ... VK_F24          : return (vk - VK_F1) + KB_F1;
+        case VK_NUMLOCK                : return KB_NUM_LOCK;
+        case VK_SCROLL                 : return KB_SCROLL_LOCK;
+        case VK_OEM_1                  : return KB_SEMICOLON;
+        case VK_OEM_PLUS               : return KB_EQUALS;
+        case VK_OEM_COMMA              : return KB_COMMA;
+        case VK_OEM_MINUS              : return KB_MINUS;
+        case VK_OEM_PERIOD             : return KB_PERIOD;
+        case VK_OEM_2                  : return KB_SLASH;
+        case VK_OEM_3                  : return KB_BACKTICK;
+        case VK_OEM_4                  : return KB_BRACKET_LEFT;
+        case VK_OEM_5                  : return KB_BACKSLASH;
+        case VK_OEM_6                  : return KB_BRACKET_RIGHT;
+        case VK_OEM_7                  : return KB_QUOTE;
+        case VK_SNAPSHOT               : return KB_PRINT_SCREEN;
+        case VK_DELETE                 : return KB_DELETE;
+        case VK_ADD                    : return KB_PAD_ADD;
+        case VK_MULTIPLY               : return KB_PAD_MULTIPLY;
+        case VK_SUBTRACT               : return KB_PAD_SUBTRACT;
+        case VK_DIVIDE                 : return KB_PAD_DIVIDE;
+        case VK_DECIMAL                : return KB_PAD_DOT;
+        case VK_INSERT                 : return KB_INSERT;
+        case VK_APPS                   : return KB_RIGHT_CLICK_MENU;
+        default                        : return KB_UNKNOWN;
     }
 }
 
+#undef def
 #endif /* Platform Windows */
 

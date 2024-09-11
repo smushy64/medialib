@@ -11,7 +11,7 @@ This library provides cross-platform media io
 - [Doxygen >= 1.10.0](https://www.doxygen.nl/) (for generating documentation)
 
 ## Limitations
-- currently only Windows is currently supported.
+- currently only Windows is supported.
 
 <!-- TODO(alicia): Latest Release link! -->
 ## Links

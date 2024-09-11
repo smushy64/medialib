@@ -7,12 +7,11 @@ This library provides cross-platform media io
 
 ## Requirements
 - clang
-- GNU Make
-- [MinGW](https://www.mingw-w64.org/) (only on Windows or if cross-compiling to it)
+- [MinGW](https://www.mingw-w64.org/) (only on Windows)
 - [Doxygen >= 1.10.0](https://www.doxygen.nl/) (for generating documentation)
 
 ## Limitations
-- currently only win32 is supported.
+- currently only Windows is currently supported.
 
 <!-- TODO(alicia): Latest Release link! -->
 ## Links

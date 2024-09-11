@@ -27,8 +27,8 @@
     attr_global void* global_media_logging_callback_params            = 0;
 #endif
 
-extern unsigned int external_media_library_command_line_len;
 extern const char   external_media_library_command_line[];
+extern unsigned int external_media_library_command_line_len;
 
 attr_media_api m_uint32 media_lib_query_version(void) {
     return media_lib_create_version(

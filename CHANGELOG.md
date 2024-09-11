@@ -20,6 +20,13 @@ Indicates additions to API, minor bug fixes and other small changes.
 
 0.1.1
 -----
+- ./test/: renamed to tests
+- sources.h: added guard around platform_sharedmain.c
+- gitignore: ignore cbuild executable, ignore ./generated/
+- readme.md: removed references to GNU make.
+- build.md: updated with cbuild instructions.
+- doxyfile: removed reference to corelib.
+- cbuild: replaced Makefile with cbuild.
 - input/win32: decoupled input handling from media_initialize into its own functions.
 - surface:win32: bug: mouse delta y was negative.
 - surface:win32: message thread no longer calls WaitMessage().

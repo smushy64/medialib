@@ -8,7 +8,10 @@
 
 #include "impl/cstdlib.c"
 #include "impl/lib.c"
-#include "impl/platform_sharedmain.c"
+
+#if !defined(MEDIA_ENABLE_STATIC_BUILD)
+    #include "impl/platform_sharedmain.c"
+#endif
 
 #if defined(MEDIA_PLATFORM_WINDOWS)
     #include "impl/win32/common.c"
@@ -18,3 +21,4 @@
     #include "impl/win32/opengl.c"
     #include "impl/win32/audio.c"
 #endif
+

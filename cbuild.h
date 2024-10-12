@@ -2321,7 +2321,7 @@ does_not_return() void cbuild_rebuild(
         "\033[1;00m\n" );
     exit(0);
 #else
-    process_exec( global_command_line, false, 0, 0, 0 );
+    process_exec( global_command_line, false, 0, 0, 0, 0 );
     exit(0);
 #endif
 }
@@ -5374,7 +5374,9 @@ b32 fd_open( const cstr* path, FileOpenFlags flags, FD* out_file ) {
         oflag |= O_APPEND;
     }
 
-    int fd = open( path, oflag );
+    mode_t mode = S_IRUSR | S_IWUSR;
+
+    int fd = open( path, oflag, mode );
     if( fd < 0 ) {
         cb_error( "fd_open: failed to open '%s'!", path );
         return false;
@@ -5393,7 +5395,7 @@ b32 fd_write( FD* file, usize size, const void* buf, usize* opt_out_write_size )
         return false;
     }
 
-    if( *opt_out_write_size ) {
+    if( opt_out_write_size ) {
         *opt_out_write_size = write_size;
     }
     return true;

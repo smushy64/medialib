@@ -133,25 +133,25 @@ typedef struct SurfaceCallbackData {
         /// @see #SURFACE_CALLBACK_TYPE_FOCUS
         struct {
             /// @brief If focus was gained or lost.
-            m_bool32 gained;
+            _Bool gained;
         } focus;
         /// @brief Surface resize callback data.
         /// @details Valid when surface is resized by user or through an API call.
         /// @see #SURFACE_CALLBACK_TYPE_RESIZE
         struct {
             /// @brief Old surface client area dimensions.
-            m_int32 old_w, old_h;
+            int32_t old_w, old_h;
             /// @brief New surface client area dimensions.
-            m_int32 w, h;
+            int32_t w, h;
         } resize;
         /// @brief Surface position callback data.
         /// @details Valid when surface is repositioned by user or through an API call.
         /// @see #SURFACE_CALLBACK_TYPE_POSITION
         struct {
             /// @brief Old surface screen position.
-            m_int32 old_x, old_y;
+            int32_t old_x, old_y;
             /// @brief New surface screen position.
-            m_int32 x, y;
+            int32_t x, y;
         } position;
         /// @brief Mouse button callback data.
         /// @details Mouse button press/release.
@@ -173,7 +173,7 @@ typedef struct SurfaceCallbackData {
             ///
             /// if position is outside valid range, that means mouse pointer
             /// is outside of surface.
-            m_int32 x, y;
+            int32_t x, y;
         } mouse_move;
         /// @brief Mouse move callback data.
         /// @details Mouse move delta.
@@ -185,7 +185,7 @@ typedef struct SurfaceCallbackData {
             /// - positive x is movement towards right side of screen.
             /// - negative y is movement towards bottom side of screen.
             /// - positive y is movement towards top side of screen.
-            m_int32 x, y;
+            int32_t x, y;
         } mouse_move_delta;
         /// @brief Mouse wheel callback data.
         /// @details Mouse wheel delta.
@@ -200,9 +200,9 @@ typedef struct SurfaceCallbackData {
             /// if @c is_horizontal is false:
             ///     - negative : scrolled down (away from screen).
             ///     - positive : scrolled up (towards screen).
-            m_int32  delta;
+            int32_t  delta;
             /// @brief Whether scroll direction is vertical or horizontal.
-            m_bool32 is_horizontal;
+            _Bool is_horizontal;
         } mouse_wheel;
         /// @brief Key callback data.
         /// @details Key press/release.
@@ -214,7 +214,7 @@ typedef struct SurfaceCallbackData {
             /// @note Only valid when input subsystem is initialized.
             enum KeyboardMod  mod;
             /// @brief Whether key was pressed or released.
-            m_bool32 is_down;
+            _Bool is_down;
         } key;
         /// @brief Text callback data.
         /// @details Text from keyboard.
@@ -224,7 +224,7 @@ typedef struct SurfaceCallbackData {
             char utf8[16];
         } text;
         /// @brief Raw callback data bytes.
-        m_uint8 raw[sizeof(m_uint64) * 2];
+        uint8_t raw[sizeof(uint64_t) * 2];
     };
 } SurfaceCallbackData;
 
@@ -236,7 +236,7 @@ typedef void SurfaceCallbackFN(
     const SurfaceHandle* surface, const SurfaceCallbackData* data, void* params );
 /// @brief Query how much memory is required to create a new surface.
 /// @return Size of media surface.
-attr_media_api m_uintptr surface_query_memory_requirement(void);
+attr_media_api uintptr_t surface_query_memory_requirement(void);
 /// @brief Create a media surface.
 /// @param      title_len           Length of title of surface.
 /// @param[in]  title               Title of surface (this is the title of surface on supported platforms).
@@ -255,8 +255,8 @@ attr_media_api m_uintptr surface_query_memory_requirement(void);
 /// (uses screen width and height instead).
 /// @note @c x and @c y are in terms of surface's top left corner.
 /// @note @c w and @c h are dimensions of surface's client area.
-attr_media_api m_bool32 surface_create(
-    m_uint32 title_len, const char* title, m_int32 x, m_int32 y, m_int32 w, m_int32 h,
+attr_media_api _Bool surface_create(
+    uint32_t title_len, const char* title, int32_t x, int32_t y, int32_t w, int32_t h,
     SurfaceCreateFlags flags, SurfaceCallbackFN* opt_callback,
     void* opt_callback_params, SurfaceHandle* opt_parent, SurfaceHandle* out_surface );
 /// @brief Destroy a media surface.
@@ -288,39 +288,39 @@ attr_media_api void* surface_get_platform_handle( SurfaceHandle* surface );
 /// @param[out] opt_out_len (optional) Pointer to write length of title to.
 /// @return Read-only pointer to surface title (UTF-8 encoded).
 attr_media_api const char* surface_query_title(
-    const SurfaceHandle* surface, m_uint32* opt_out_len );
+    const SurfaceHandle* surface, uint32_t* opt_out_len );
 /// @brief Set title of surface.
 /// @param[in] surface Surface to set title of.
 /// @param     len     Length of new title.
 /// @param[in] title   Pointer to start of new title (UTF-8 encoded).
 attr_media_api void surface_set_title(
-    SurfaceHandle* surface, m_uint32 len, const char* title );
+    SurfaceHandle* surface, uint32_t len, const char* title );
 /// @brief Query position of surface.
 /// @param[in]  surface      Surface to get position of.
 /// @param[out] out_x, out_y Pointer to integers to write position to.
 /// @note Position is in terms of surface's top left corner.
 attr_media_api void surface_query_position(
-    const SurfaceHandle* surface, m_int32* out_x, m_int32* out_y );
+    const SurfaceHandle* surface, int32_t* out_x, int32_t* out_y );
 /// @brief Set position of surface.
 /// @param[in] surface Surface to set position of.
 /// @param     x, y    New position of surface.
 /// @note Not all platforms support moving surface.
 /// @note Position is in terms of surface's top left corner.
 attr_media_api void surface_set_position(
-    SurfaceHandle* surface, m_int32 x, m_int32 y );
+    SurfaceHandle* surface, int32_t x, int32_t y );
 /// @brief Query dimensions of surface.
 /// @param[in]  surface      Surface to query dimensions of.
 /// @param[out] out_w, out_h Pointer to integers to write dimensions to.
 /// @note Width and height are always in terms of client area, not total window size.
 attr_media_api void surface_query_dimensions(
-    const SurfaceHandle* surface, m_int32* out_w, m_int32* out_h );
+    const SurfaceHandle* surface, int32_t* out_w, int32_t* out_h );
 /// @brief Set dimensions of surface.
 /// @param[in] surface Surface to set dimensions of.
 /// @param     w, h    New dimensions of surface.
 /// @note Width and height are always in terms of client area, not total window size.
 /// @note Does nothing if surface is fullscreen.
 attr_media_api void surface_set_dimensions(
-    SurfaceHandle* surface, m_int32 w, m_int32 h );
+    SurfaceHandle* surface, int32_t w, int32_t h );
 /// @brief Query surface state.
 /// @param[in] surface Surface to query state of.
 /// @return State flags.
@@ -330,18 +330,18 @@ attr_media_api SurfaceStateFlags surface_query_state( const SurfaceHandle* surfa
 /// @param     is_fullscreen If surface should be fullscreen or not.
 /// @note Some platforms don't have a notion of fullscreen/windowed surfaces.
 attr_media_api void surface_set_fullscreen(
-    SurfaceHandle* surface, m_bool32 is_fullscreen );
+    SurfaceHandle* surface, _Bool is_fullscreen );
 /// @brief Hide/show surface.
 /// @param[in] surface   Surface to hide/show.
 /// @param     is_hidden If surface should be hidden or shown.
-attr_media_api void surface_set_hidden( SurfaceHandle* surface, m_bool32 is_hidden );
+attr_media_api void surface_set_hidden( SurfaceHandle* surface, _Bool is_hidden );
 
 /// @brief Format surface callback type as a string.
 /// @param      type        Callback type to format.
 /// @param[out] opt_out_len (optional) Length of formatted string.
 /// @return Pointer to string.
 attr_header const char* surface_callback_type_to_string(
-    SurfaceCallbackType type, m_uintptr* opt_out_len
+    SurfaceCallbackType type, uintptr_t* opt_out_len
 ) {
     #define result( str ) do {\
         if( opt_out_len ) {\

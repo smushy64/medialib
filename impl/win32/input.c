@@ -69,10 +69,10 @@ DWORD win32_xinput_thread( LPVOID lpParameter ) {
     return 0;
 }
 
-attr_media_api m_uintptr input_subsystem_query_memory_requirement(void) {
+attr_media_api uintptr_t input_subsystem_query_memory_requirement(void) {
     return sizeof(*global_win32_input);
 }
-attr_media_api m_bool32 input_subsystem_initialize( void* buffer ) {
+attr_media_api _Bool input_subsystem_initialize( void* buffer ) {
     #define load( lib, fn ) do {\
         if( !fn ) {\
             fn = (fn##FN*)GetProcAddress( global_win32_state->modules.lib, #fn );\
@@ -90,7 +90,7 @@ attr_media_api m_bool32 input_subsystem_initialize( void* buffer ) {
     load( USER32, RegisterRawInputDevices );
     load( USER32, GetRawInputData );
 
-    m_bool32 xinput_1_3 = false;
+    _Bool xinput_1_3 = false;
     HMODULE xinput = LoadLibraryA( "XINPUT1_4.DLL" );
     if( !xinput ) {
         xinput = LoadLibraryA( "XINPUT9_1_0.DLL" );
@@ -264,7 +264,7 @@ attr_media_api void input_subsystem_update(void) {
 attr_media_api KeyboardMod input_keyboard_query_mod(void) {
     return global_win32_state->mod;
 }
-attr_media_api m_bool32 input_keyboard_query_key( KeyboardCode keycode ) {
+attr_media_api _Bool input_keyboard_query_key( KeyboardCode keycode ) {
     return keyboard_state_get_key( &global_win32_input->kb, keycode );
 }
 attr_media_api void input_keyboard_copy_state( KeyboardState* out_state ) {
@@ -273,12 +273,12 @@ attr_media_api void input_keyboard_copy_state( KeyboardState* out_state ) {
 attr_media_api MouseButton input_mouse_query_buttons(void) {
     return global_win32_state->mb;
 }
-attr_media_api void input_mouse_query_position( m_int32* out_x, m_int32* out_y ) {
+attr_media_api void input_mouse_query_position( int32_t* out_x, int32_t* out_y ) {
     *out_x = global_win32_input->mb_x;
     *out_y = global_win32_input->mb_y;
 }
 attr_media_api void input_mouse_position_to_client(
-    SurfaceHandle* surface, m_int32* in_out_x, m_int32* in_out_y
+    SurfaceHandle* surface, int32_t* in_out_x, int32_t* in_out_y
 ) {
     HWND hwnd = (HWND)surface_get_platform_handle( surface );
     POINT pos;
@@ -286,7 +286,7 @@ attr_media_api void input_mouse_position_to_client(
     pos.y = *in_out_y;
     ScreenToClient( hwnd, &pos );
 
-    m_int32 w, h;
+    int32_t w, h;
     surface_query_dimensions( surface, &w, &h );
 
     if( pos.x < 0 ) {
@@ -305,12 +305,12 @@ attr_media_api void input_mouse_position_to_client(
     *in_out_x = pos.x;
     *in_out_y = h - pos.y;
 }
-attr_media_api void input_mouse_query_delta( m_int32* out_x, m_int32* out_y ) {
+attr_media_api void input_mouse_query_delta( int32_t* out_x, int32_t* out_y ) {
     *out_x = global_win32_input->mb_dx;
     *out_y = global_win32_input->mb_dy;
 }
-attr_media_api m_bool32 input_gamepad_query_state(
-    m_uint32 index, GamepadState* out_state
+attr_media_api _Bool input_gamepad_query_state(
+    uint32_t index, GamepadState* out_state
 ) {
     if( index >= XUSER_MAX_COUNT || !global_win32_input->gp_connected[index] ) {
         return false;
@@ -319,8 +319,8 @@ attr_media_api m_bool32 input_gamepad_query_state(
     memcpy( out_state, global_win32_input->gp + index, sizeof(*out_state) );
     return true;
 }
-attr_media_api m_bool32 input_gamepad_rumble_set(
-    m_uint32 index, m_uint16 motor_left, m_uint16 motor_right
+attr_media_api _Bool input_gamepad_rumble_set(
+    uint32_t index, uint16_t motor_left, uint16_t motor_right
 ) {
     if( index >= XUSER_MAX_COUNT || !global_win32_input->gp_connected[index] ) {
         return false;
@@ -354,17 +354,17 @@ LRESULT win32_winproc_input( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
             if( kb->MakeCode == KEYBOARD_OVERRUN_MAKE_CODE ) {
                 break;
             }
-            /* m_uint16 scan = kb->MakeCode; */
-            m_uint16 vk   = kb->VKey;
+            /* uint16_t scan = kb->MakeCode; */
+            uint16_t vk   = kb->VKey;
 
-            m_bool32 is_e0 = ((kb->Flags & RI_KEY_E0) != 0);
-            m_bool32 is_e1 = ((kb->Flags & RI_KEY_E1) != 0);
+            _Bool is_e0 = ((kb->Flags & RI_KEY_E0) != 0);
+            _Bool is_e1 = ((kb->Flags & RI_KEY_E1) != 0);
             unused(is_e1);
 
-            m_uint16 vk_translate   = vk;
+            uint16_t vk_translate   = vk;
 
-            m_bool32 down           = !(kb->Flags & RI_KEY_BREAK);
-            m_uint32 scan_translate = MapVirtualKeyW( vk, MAPVK_VK_TO_VSC );
+            _Bool down           = !(kb->Flags & RI_KEY_BREAK);
+            uint32_t scan_translate = MapVirtualKeyW( vk, MAPVK_VK_TO_VSC );
 
             switch( vk ) {
                 case VK_PAUSE: {
@@ -441,7 +441,7 @@ LRESULT win32_winproc_input( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
             WPARAM dx = win32_mouse_x_to_wparam( mb->lLastX );
             LPARAM dy = win32_mouse_y_to_lparam( mb->lLastY );
 
-            m_uint16    flags = mb->usButtonFlags;
+            uint16_t    flags = mb->usButtonFlags;
             MouseButton btn   = global_win32_state->mb;
 
             if( (flags & RI_MOUSE_LEFT_BUTTON_DOWN) == RI_MOUSE_LEFT_BUTTON_DOWN ) {
@@ -478,9 +478,9 @@ LRESULT win32_winproc_input( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
                 btn &= ~MB_EXTRA_2;
             }
 
-            m_int16 scroll = *(m_int16*)&mb->usButtonData;
+            int16_t scroll = *(int16_t*)&mb->usButtonData;
             scroll = scroll < 0 ? -1 : 1;
-            m_bool32 scroll_hor = (flags & RI_MOUSE_HWHEEL) == RI_MOUSE_HWHEEL;
+            _Bool scroll_hor = (flags & RI_MOUSE_HWHEEL) == RI_MOUSE_HWHEEL;
 
             MouseButton delta = btn ^ global_win32_state->mb;
             global_win32_state->mb = btn;

@@ -30,11 +30,11 @@
 extern const char   external_media_library_command_line[];
 extern unsigned int external_media_library_command_line_len;
 
-attr_media_api m_uint32 media_lib_query_version(void) {
+attr_media_api uint32_t media_lib_query_version(void) {
     return media_lib_create_version(
         MEDIA_LIB_VERSION_MAJOR, MEDIA_LIB_VERSION_MINOR, MEDIA_LIB_VERSION_PATCH );
 }
-attr_media_api const char* media_lib_query_command_line( m_uint32* opt_out_len ) {
+attr_media_api const char* media_lib_query_command_line( uint32_t* opt_out_len ) {
     *opt_out_len = external_media_library_command_line_len;
     return external_media_library_command_line;
 }
@@ -64,7 +64,7 @@ attr_media_api void media_lib_set_logging_callback(
 #define validate( level )\
 ( global_media_logging_level ? ( global_media_logging_level >= (level) ) : false )
 
-void media_log( MediaLoggingLevel level, m_uint32 len, const char* message ) {
+void media_log( MediaLoggingLevel level, uint32_t len, const char* message ) {
     unused(level, len, message);
 #if defined(MEDIA_ENABLE_LOGGING)
     if( !(validate(level) && global_media_logging_callback) ) {

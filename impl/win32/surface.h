@@ -19,7 +19,7 @@ struct Win32Surface {
     HWND hwnd;
     HDC  hdc;
 
-    m_int32 x, y, w, h;
+    int32_t x, y, w, h;
 
     WINDOWPLACEMENT placement;
 
@@ -30,7 +30,7 @@ struct Win32Surface {
     SurfaceCallbackFN* callback;
     void* callback_params;
 
-    m_uint8 title_len;
+    uint8_t title_len;
     union {
         wchar_t title_ucs2[WIN32_SURFACE_TITLE_UCS2_CAP];
         char title_utf8[WIN32_SURFACE_TITLE_SIZE];

@@ -10,7 +10,7 @@
 #include "media/types.h"
 
 /// @brief Cursor shapes.
-typedef enum CursorType : m_uint32 {
+typedef enum CursorType : uint32_t {
     /// @brief Arrow cursor.
     /// @details This is the default cursor.
     CURSOR_TYPE_ARROW,
@@ -56,6 +56,6 @@ attr_media_api void cursor_type_set( SurfaceHandle* surface, CursorType cursor )
 attr_media_api void cursor_center( SurfaceHandle* surface );
 /// @brief Show/hide cursor.
 /// @param is_visible If true, show cursor. If false, hide cursor.
-attr_media_api void cursor_set_visible( m_bool32 is_visible );
+attr_media_api void cursor_set_visible( _Bool is_visible );
 
 #endif /* header guard */

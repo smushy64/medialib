@@ -18,25 +18,25 @@
 struct AudioBufferFormat {
     /// @brief Number of channels.
     /// @note Channel samples are interleaved.
-    m_uint8  channel_count;
+    uint8_t  channel_count;
     /// @brief Bits per sample.
     /// @details Common values are 16, 24 and 32.
-    m_uint32 bits_per_sample;
+    uint32_t bits_per_sample;
     /// @brief Number of samples in a second.
     /// @details Common values are 441000 and 48000
-    m_uint32 samples_per_second;
+    uint32_t samples_per_second;
     /// @brief Number of total samples a given audio device has allocated.
     /// @details
     /// A sample includes each channel.
     /// Total sample size would then be @c channel_count * ( @c bits_per_sample / 8 )
-    m_uint32 sample_count;
+    uint32_t sample_count;
 };
 /// @brief Structure representing a locked portion of audio device's buffer.
 struct AudioBuffer {
     /// @brief Number of samples locked.
-    m_uint32 sample_count;
+    uint32_t sample_count;
     /// @brief Size of locked portion in bytes.
-    m_uint32 size;
+    uint32_t size;
     /// @brief Pointer to start of locked audio buffer.
     void* start;
 };
@@ -56,19 +56,19 @@ typedef void AudioDevice;
 
 /// @brief Query memory requirement for retrieving a list of available devices.
 /// @return Bytes required to store device list.
-attr_media_api m_uintptr audio_device_list_query_memory_requirement(void);
+attr_media_api uintptr_t audio_device_list_query_memory_requirement(void);
 /// @brief Create a list of audio devices.
 /// @param[in,out] in_out_list Pointer to buffer allocated for holding device list.
 /// Must be able to hold result of audio_device_list_query_memory_requirement().
 /// @return
 ///     - true  : Audio device list created successfully.
 ///     - false : Failed to create audio device list.
-attr_media_api m_bool32 audio_device_list_create( AudioDeviceList* in_out_list );
+attr_media_api _Bool audio_device_list_create( AudioDeviceList* in_out_list );
 /// @brief Query number of devices in audio device list.
 /// @param[in] list Pointer to an audio device list.
 /// @param     type Filter result by type of audio device.
 /// @return Number of available devices for given type.
-attr_media_api m_uint32 audio_device_list_query_count(
+attr_media_api uint32_t audio_device_list_query_count(
     AudioDeviceList* list, enum AudioDeviceType type );
 /// @brief Query the name of a given audio device in list.
 /// @param[in]  list         Pointer to an audio device list.
@@ -79,10 +79,10 @@ attr_media_api m_uint32 audio_device_list_query_count(
 /// @return
 ///     - true  : Successfully obtained audio device name.
 ///     - false : Failed to obtain audio device name.
-attr_media_api m_bool32 audio_device_list_query_name(
+attr_media_api _Bool audio_device_list_query_name(
     AudioDeviceList* list,
-    enum AudioDeviceType type, m_uint32 index,
-    char out_name[AUDIO_DEVICE_NAME_CAP], m_uint32* out_name_len );
+    enum AudioDeviceType type, uint32_t index,
+    char out_name[AUDIO_DEVICE_NAME_CAP], uint32_t* out_name_len );
 /// @brief Destroy audio device list object.
 /// @param[in] list Pointer to audio device list to destroy. 
 /// Its memory can be freed after calling this function.
@@ -90,7 +90,7 @@ attr_media_api void audio_device_list_destroy( AudioDeviceList* list );
 
 /// @brief Query audio device memory requirement.
 /// @return Bytes required for audio device.
-attr_media_api m_uintptr audio_device_query_memory_requirement(void);
+attr_media_api uintptr_t audio_device_query_memory_requirement(void);
 /// @brief Open an audio device.
 /// @param[in]     list             Audio device list.
 /// @param[in]     opt_format       (optional) Format that audio device should be opened with.
@@ -102,10 +102,10 @@ attr_media_api m_uintptr audio_device_query_memory_requirement(void);
 /// @return
 ///     - true  : Opened audio device successfully.
 ///     - false : Failed to open audio device.
-attr_media_api m_bool32 audio_device_open(
+attr_media_api _Bool audio_device_open(
     AudioDeviceList* list, struct AudioBufferFormat* opt_format,
-    m_uint32 buffer_length_ms, enum AudioDeviceType type,
-    m_uint32 device_index, AudioDevice* out_device );
+    uint32_t buffer_length_ms, enum AudioDeviceType type,
+    uint32_t device_index, AudioDevice* out_device );
 /// @brief Close audio device.
 /// @param[in] device Pointer to audio device to close.
 attr_media_api void audio_device_close( AudioDevice* device );
@@ -119,7 +119,7 @@ attr_media_api void audio_device_query_format(
 /// @return
 ///     - true  : Started audio device.
 ///     - false : Failed to start audio device.
-attr_media_api m_bool32 audio_device_start( AudioDevice* device );
+attr_media_api _Bool audio_device_start( AudioDevice* device );
 /// @brief Stop playing audio device.
 /// @param[in] device Pointer to audio device to stop.
 attr_media_api void audio_device_stop( AudioDevice* device );
@@ -129,7 +129,7 @@ attr_media_api void audio_device_stop( AudioDevice* device );
 /// @return
 ///     - true  : Locked buffer successfully.
 ///     - false : Failed to lock audio device buffer.
-attr_media_api m_bool32 audio_device_buffer_lock(
+attr_media_api _Bool audio_device_buffer_lock(
     AudioDevice* device, struct AudioBuffer* out_buffer );
 /// @brief Unlock audio device buffer.
 /// @param[in] device Device to unlock.

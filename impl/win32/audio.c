@@ -26,8 +26,8 @@ struct Win32AudioDevice {
         IAudioCaptureClient* capture;
     };
     WAVEFORMATEXTENSIBLE fmt;
-    m_uint32 frame_count;
-    m_uint32 buffer_size;
+    uint32_t frame_count;
+    uint32_t buffer_size;
 };
 struct Win32AudioDeviceList {
     IMMDeviceEnumerator* enumerator;
@@ -35,10 +35,10 @@ struct Win32AudioDeviceList {
     IMMDeviceCollection* output_devices;
 };
 
-attr_media_api m_uintptr audio_device_list_query_memory_requirement(void) {
+attr_media_api uintptr_t audio_device_list_query_memory_requirement(void) {
     return sizeof(struct Win32AudioDeviceList);
 }
-attr_media_api m_bool32 audio_device_list_create( AudioDeviceList* out_list ) {
+attr_media_api _Bool audio_device_list_create( AudioDeviceList* out_list ) {
     struct Win32AudioDeviceList* list = out_list;
     HRESULT hr = CoCreateInstance(
         &CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL,
@@ -64,7 +64,7 @@ attr_media_api m_bool32 audio_device_list_create( AudioDeviceList* out_list ) {
 
     return true;
 }
-attr_media_api m_uint32 audio_device_list_query_count(
+attr_media_api uint32_t audio_device_list_query_count(
     AudioDeviceList* in_list, enum AudioDeviceType type
 ) {
     struct Win32AudioDeviceList* list = in_list;
@@ -79,10 +79,10 @@ attr_media_api m_uint32 audio_device_list_query_count(
     }
     return res;
 }
-attr_media_api m_bool32 audio_device_list_query_name(
+attr_media_api _Bool audio_device_list_query_name(
     AudioDeviceList* in_list,
-    enum AudioDeviceType type, m_uint32 index,
-    char out_name[260], m_uint32* out_name_len
+    enum AudioDeviceType type, uint32_t index,
+    char out_name[260], uint32_t* out_name_len
 ) {
     struct Win32AudioDeviceList* list = in_list;
     HRESULT hr;
@@ -155,15 +155,15 @@ attr_media_api void audio_device_list_destroy( AudioDeviceList* in_list ) {
     memset( list, 0, sizeof(*list) );
 }
 
-attr_media_api m_uintptr audio_device_query_memory_requirement(void) {
+attr_media_api uintptr_t audio_device_query_memory_requirement(void) {
     return sizeof(struct Win32AudioDevice);
 }
-attr_media_api m_bool32 audio_device_open(
+attr_media_api _Bool audio_device_open(
     AudioDeviceList*          in_list,
     struct AudioBufferFormat* opt_format,
-    m_uint32                  buffer_length_ms,
+    uint32_t                  buffer_length_ms,
     enum AudioDeviceType      type,
-    m_uint32                  device_index,
+    uint32_t                  device_index,
     AudioDevice*              out_device
 ) {
     struct Win32AudioDeviceList* list   = in_list;
@@ -321,7 +321,7 @@ attr_media_api void audio_device_query_format(
     out_format->samples_per_second = device->fmt.Format.nSamplesPerSec;
     out_format->sample_count       = device->frame_count;
 }
-attr_media_api m_bool32 audio_device_buffer_lock(
+attr_media_api _Bool audio_device_buffer_lock(
     AudioDevice* in_device, struct AudioBuffer* out_buffer
 ) {
     struct Win32AudioDevice* device = in_device;
@@ -330,7 +330,7 @@ attr_media_api m_bool32 audio_device_buffer_lock(
         return false;
     }
 
-    m_uint32 frame_padding_count = 0;
+    uint32_t frame_padding_count = 0;
     HRESULT hr = device->client->lpVtbl->GetCurrentPadding(
         device->client, &frame_padding_count );
     if( !CoCheck( hr ) ) {
@@ -341,7 +341,7 @@ attr_media_api m_bool32 audio_device_buffer_lock(
         return false;
     }
 
-    m_uint32 frames_request = device->frame_count - frame_padding_count;
+    uint32_t frames_request = device->frame_count - frame_padding_count;
     if( !frames_request ) {
         return false;
     }
@@ -370,7 +370,7 @@ attr_media_api void audio_device_buffer_unlock(
     device->render->lpVtbl->ReleaseBuffer( device->render, buffer->sample_count, 0 );
     memset( buffer, 0, sizeof(*buffer) );
 }
-attr_media_api m_bool32 audio_device_start( AudioDevice* in_device ) {
+attr_media_api _Bool audio_device_start( AudioDevice* in_device ) {
     struct Win32AudioDevice* device = in_device;
     if( device->type != AUDIO_DEVICE_TYPE_OUTPUT ) {
         win32_error( "audio: attempted to start an input audio device!" );

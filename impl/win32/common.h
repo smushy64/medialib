@@ -45,7 +45,7 @@ struct Win32State {
 };
 extern struct Win32State* global_win32_state;
 extern HCURSOR global_win32_cursors[CURSOR_TYPE_COUNT];
-extern m_bool32 global_win32_cursor_hidden;
+extern _Bool global_win32_cursor_hidden;
 
 #define win32_error(...) media_error( "win32: " __VA_ARGS__)
 #define win32_warn(...) media_warn( "win32: " __VA_ARGS__)
@@ -59,12 +59,12 @@ extern m_bool32 global_win32_cursor_hidden;
 } while(0)
 
 wchar_t* win32_utf8_to_ucs2_alloc(
-    m_uint32 utf8_len, const char* utf8, m_uint32* opt_out_len );
+    uint32_t utf8_len, const char* utf8, uint32_t* opt_out_len );
 
 MONITORINFO win32_monitor_info( HWND opt_hwnd );
 
 void win32_error_message_full(
-    DWORD error_code, m_uint32 message_len, const char* message );
+    DWORD error_code, uint32_t message_len, const char* message );
 
 #define win32_error_message( error_code, message )\
     win32_error_message_full( error_code, sizeof(message) - 1, message )

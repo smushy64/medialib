@@ -25,34 +25,34 @@ typedef enum MediaLoggingLevel {
 /// @param[in] message Pointer to start of log message.
 /// @param[in] params  Pointer to user parameters.
 typedef void MediaLoggingCallbackFN(
-    MediaLoggingLevel level, m_uint32 len, const char* message, void* params );
+    MediaLoggingLevel level, uint32_t len, const char* message, void* params );
 
 /// @brief Create a 32-bit unsigned integer that encodes a version of medialib.
-/// @param major (m_uint16) Major version.
-/// @param minor (m_uint8) Minor version.
-/// @param patch (m_uint8) Patch version.
+/// @param major (uint16_t) Major version.
+/// @param minor (uint8_t) Minor version.
+/// @param patch (uint8_t) Patch version.
 /// @return Version encoded as a 32-bit unsigned integer.
 #define media_lib_create_version( major, minor, patch )\
-   ((m_uint32)((major) << 16u | (minor) << 8u | (patch)))
+   ((uint32_t)((major) << 16u | (minor) << 8u | (patch)))
 /// @brief Extract major version from a medialib version integer.
-/// @param version (m_uint32) Medialib version encoded as an unsigned 32-bit integer.
+/// @param version (uint32_t) Medialib version encoded as an unsigned 32-bit integer.
 /// @return Major version.
 #define media_lib_major( version )\
-   ((m_uint16)(((version) & 0xFFFF0000u) >> 16u))
+   ((uint16_t)(((version) & 0xFFFF0000u) >> 16u))
 /// @brief Extract minor version from a medialib version integer.
-/// @param version (m_uint32) Medialib version encoded as an unsigned 32-bit integer.
+/// @param version (uint32_t) Medialib version encoded as an unsigned 32-bit integer.
 /// @return Minor version.
 #define media_lib_minor( version )\
-   ((m_uint8)(((version) & 0x0000FF00u) >> 8u))
+   ((uint8_t)(((version) & 0x0000FF00u) >> 8u))
 /// @brief Extract patch version from a medialib version integer.
-/// @param version (m_uint32) Medialib version encoded as an unsigned 32-bit integer.
+/// @param version (uint32_t) Medialib version encoded as an unsigned 32-bit integer.
 /// @return Patch version.
 #define media_lib_patch( version )\
-   ((m_uint8)((version) & 0x000000FFu))
+   ((uint8_t)((version) & 0x000000FFu))
 
 /// @brief Query memory requirement for media library buffer.
 /// @return Number of bytes required to initialize media library.
-attr_media_api m_uintptr media_lib_query_memory_requirement(void);
+attr_media_api uintptr_t media_lib_query_memory_requirement(void);
 /// @brief Initialize media library. Must be called before other library functions.
 /// @param     log_level               Logging level. Only relevant when media library is compiled with logging enabled.
 /// @param[in] opt_log_callback        (optional) Pointer to logging callback function.
@@ -61,7 +61,7 @@ attr_media_api m_uintptr media_lib_query_memory_requirement(void);
 /// @return
 ///     - true  : Media library was successfully initialized.
 ///     - false : Failed to initialize media library.
-attr_media_api m_bool32 media_lib_initialize(
+attr_media_api _Bool media_lib_initialize(
     MediaLoggingLevel       log_level,
     MediaLoggingCallbackFN* opt_log_callback,
     void*                   opt_log_callback_params,
@@ -75,11 +75,11 @@ attr_media_api void media_lib_shutdown(void);
 /// @brief Query version of media library.
 /// @return Bitpacked version of media library.
 /// Use media_lib_major(), media_lib_minor() and media_lib_patch() to extract version numbers.
-attr_media_api m_uint32 media_lib_query_version(void);
+attr_media_api uint32_t media_lib_query_version(void);
 /// @brief Query command line arguments used to compile media library.
 /// @param[out] opt_out_len (optional) Pointer to write length of command line string to.
 /// @return Pointer to start of command line arguments.
-attr_media_api const char* media_lib_query_command_line( m_uint32* opt_out_len );
+attr_media_api const char* media_lib_query_command_line( uint32_t* opt_out_len );
 /// @brief Set logging level for media library. Does nothing if library was compiled without logging support.
 /// @note This function is not thread safe.
 /// @param level Logging level to set.

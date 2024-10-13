@@ -13,34 +13,34 @@
 
 struct Win32Input {
     KeyboardState kb;
-    m_int32       mb_x, mb_y, mb_dx, mb_dy;
-    m_uint16      rumble[GAMEPAD_MAX_COUNT][2];
-    m_bool32      gp_connected[GAMEPAD_MAX_COUNT];
+    int32_t       mb_x, mb_y, mb_dx, mb_dy;
+    uint16_t      rumble[GAMEPAD_MAX_COUNT][2];
+    uint8_t       gp_connected[GAMEPAD_MAX_COUNT];
     GamepadState  gp[GAMEPAD_MAX_COUNT];
     HWND          hwnd;
     HANDLE        thread;
     volatile long thread_exit;
 };
 struct Win32KeyWParam {
-    m_uint16 keycode;
-    m_bool16 is_down;
+    uint16_t keycode;
+    uint16_t is_down;
 #if defined(MEDIA_ARCH_64_BIT)
-    m_uint32 __padding;
+    uint32_t __padding;
 #endif
 };
 struct Win32MousePositionParam {
-    m_int32 v;
+    int32_t v;
 #if defined(MEDIA_ARCH_64_BIT)
-    m_uint32 __padding;
+    uint32_t __padding;
 #endif
 };
 struct Win32MouseButtonWParam {
-    m_uint8 state;
-    m_uint8 delta;
-    m_int8  scroll;
-    m_bool8 is_scroll_horizontal;
+    uint8_t state;
+    uint8_t delta;
+    int8_t  scroll;
+    uint8_t is_scroll_horizontal;
 #if defined(MEDIA_ARCH_64_BIT)
-    m_uint32 __padding;
+    uint32_t __padding;
 #endif
 };
 

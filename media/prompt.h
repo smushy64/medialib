@@ -66,8 +66,8 @@ typedef enum PromptFileOpenResult {
 /// @param     options       Options that message box presents to the user.
 /// @return Error or button that user pressed.
 attr_media_api PromptMessageResult prompt_message(
-    m_uint32 opt_title_len, const char* opt_title,
-    m_uint32 message_len, const char* message,
+    uint32_t opt_title_len, const char* opt_title,
+    uint32_t message_len, const char* message,
     PromptMessageType type, PromptMessageOptions options );
 /// @brief Present a file open prompt to the user.
 /// @details
@@ -100,12 +100,12 @@ attr_media_api PromptMessageResult prompt_message(
 /// @return Prompt File Open Result.
 /// @see #PromptFileOpenResult
 attr_media_api PromptFileOpenResult prompt_file_open(
-    m_uint32 opt_title_len,
+    uint32_t opt_title_len,
     const char* opt_title,
-    m_uint32 opt_ext_filters_len,
+    uint32_t opt_ext_filters_len,
     const char* opt_ext_filters,
-    m_uint32 result_buffer_cap,
-    m_uint32* out_result_len,
+    uint32_t result_buffer_cap,
+    uint32_t* out_result_len,
     char* out_result_buffer );
 
 #endif /* header guard */

@@ -9,7 +9,7 @@
 #include "media/types.h"
 
 /// @brief Gamepad button bitfield.
-typedef enum GamepadButton : m_uint16 {
+typedef enum GamepadButton : uint16_t {
     /// @brief D-pad Up.
     GAMEPAD_BUTTON_DPAD_UP           = (1 << 0),
     /// @brief D-pad Down.
@@ -82,27 +82,27 @@ typedef struct GamepadState {
     /// @brief Left stick X-axis.
     ///
     /// Range (I16_MIN..I16_MAX)
-    m_int16 stick_left_x;
+    int16_t stick_left_x;
     /// @brief Left stick Y-axis.
     ///
     /// Range (I16_MIN..I16_MAX)
-    m_int16 stick_left_y;
+    int16_t stick_left_y;
     /// @brief Right stick X-axis.
     ///
     /// Range (I16_MIN..I16_MAX)
-    m_int16 stick_right_x;
+    int16_t stick_right_x;
     /// @brief Right stick Y-axis.
     ///
     /// Range (I16_MIN..I16_MAX)
-    m_int16 stick_right_y;
+    int16_t stick_right_y;
     /// @brief Left trigger.
     ///
     /// Range (0..U8_MAX)
-    m_uint8 trigger_left;
+    uint8_t trigger_left;
     /// @brief Right trigger.
     ///
     /// Range (0..U8_MAX)
-    m_uint8 trigger_right;
+    uint8_t trigger_right;
 } GamepadState;
 
 #endif /* header guard */

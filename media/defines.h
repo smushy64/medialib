@@ -153,29 +153,46 @@
     #endif
 #endif
 
-/// @brief Attribute for forcing optimizations for function.
-#define attr_optimized __attribute__((__hot__))
-/// @brief Attribute for forcing optimizations off for function.
-#define attr_optnone __attribute__((__optnone__))
+#if !defined(attr_optimized)
+    /// @brief Attribute for forcing optimizations for function.
+    #define attr_optimized __attribute__((__hot__))
+#endif
+#if !defined(attr_optnone)
+    /// @brief Attribute for forcing optimizations off for function.
+    #define attr_optnone __attribute__((__optnone__))
+#endif
 
-/// @brief Attribute for forcing function to be inlined.
-#define attr_always_inline __attribute__((__always_inline__))
-/// @brief Attribute for preventing inlining.
-#define attr_no_inline __attribute__((__noinline__))
+#if !defined(attr_always_inline)
+    /// @brief Attribute for forcing function to be inlined.
+    #define attr_always_inline __attribute__((__always_inline__))
+#endif
+#if !defined(attr_no_inline)
+    /// @brief Attribute for preventing inlining.
+    #define attr_no_inline __attribute__((__noinline__))
+#endif
 
-/// @brief Attribute for marking functions as deprecated.
-#define attr_deprecate  __attribute__((__deprecated__))
+#if !defined(attr_deprecate)
+    /// @brief Attribute for marking functions as deprecated.
+    #define attr_deprecate  __attribute__((__deprecated__))
+#endif
 
-/// @brief Attribute for marking variables/functions as unused.
-/// @note Does not do anything on MSVC if C version is < C23.
-#define attr_unused __attribute__((__unused__))
+#if !defined(attr_unused)
+    /// @brief Attribute for marking variables/functions as unused.
+    #define attr_unused __attribute__((__unused__))
+#endif
 
-/// @brief Attribute for functions that are internal to a translation unit.
-#define attr_internal static
-/// @brief Attribute for global variables.
-#define attr_global static
-/// @brief Attribute for static variables.
-#define attr_local static
+#if !defined(attr_internal)
+    /// @brief Attribute for functions that are internal to a translation unit.
+    #define attr_internal static
+#endif
+#if !defined(attr_global)
+    /// @brief Attribute for global variables.
+    #define attr_global static
+#endif
+#if !defined(attr_local)
+    /// @brief Attribute for static variables.
+    #define attr_local static
+#endif
 
 #if !defined(unused)
     attr_header attr_always_inline attr_optimized

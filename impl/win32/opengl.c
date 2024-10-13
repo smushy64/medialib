@@ -89,7 +89,7 @@ def( HGLRC, wglCreateContextAttribsARB, HDC, HGLRC, const int* );
 def( BOOL, wglSwapIntervalEXT, int );
 #define wglSwapIntervalEXT in_wglSwapIntervalEXT
 
-attr_media_api m_bool32 opengl_initialize(void) {
+attr_media_api _Bool opengl_initialize(void) {
     #define load( lib, fn ) do {\
         fn = (fn##FN*)GetProcAddress( global_win32_state->modules.lib, #fn );\
         if( !fn ) {\
@@ -145,7 +145,7 @@ attr_media_api OpenGLAttributeList opengl_attr_create(void) {
     struct Win32OpenGLAttributes attrib = win32_opengl_default_attrib();
     return *(OpenGLAttributeList*)&attrib;
 }
-attr_media_api m_bool32 opengl_attr_set(
+attr_media_api _Bool opengl_attr_set(
     OpenGLAttributeList* attr, OpenGLAttribute name, int value 
 ) {
     struct Win32OpenGLAttributes* attrib = (struct Win32OpenGLAttributes*)attr;
@@ -209,7 +209,7 @@ attr_media_api m_bool32 opengl_attr_set(
 
     return true;
 }
-attr_media_api m_int32 opengl_attr_get(
+attr_media_api int32_t opengl_attr_get(
     OpenGLAttributeList* attr, OpenGLAttribute name 
 ) {
     struct Win32OpenGLAttributes* attrib = (struct Win32OpenGLAttributes*)attr;
@@ -347,7 +347,7 @@ attr_media_api OpenGLRenderContext* opengl_context_create(
 
     return rc;
 }
-attr_media_api m_bool32 opengl_context_bind(
+attr_media_api _Bool opengl_context_bind(
     SurfaceHandle* in_surface, OpenGLRenderContext* glrc 
 ) {
     if( !in_surface || !glrc ) {
@@ -359,7 +359,7 @@ attr_media_api m_bool32 opengl_context_bind(
 attr_media_api void opengl_context_destroy( OpenGLRenderContext* glrc ) {
     wglDeleteContext( glrc );
 }
-attr_media_api m_bool32 opengl_context_share(
+attr_media_api _Bool opengl_context_share(
     OpenGLRenderContext* a, OpenGLRenderContext* b 
 ) {
     return wglShareLists( a, b ) != FALSE;
@@ -372,11 +372,11 @@ attr_media_api void* opengl_load_proc( const char* function_name ) {
     }
     return res;
 }
-attr_media_api m_bool32 opengl_swap_buffers( SurfaceHandle* in_surface ) {
+attr_media_api _Bool opengl_swap_buffers( SurfaceHandle* in_surface ) {
     struct Win32Surface* surface = in_surface;
     return SwapBuffers( surface->hdc ) != FALSE;
 }
-attr_media_api m_bool32 opengl_swap_interval(
+attr_media_api _Bool opengl_swap_interval(
     SurfaceHandle* in_surface, int interval 
 ) {
     unused( in_surface );

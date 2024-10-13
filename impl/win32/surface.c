@@ -14,7 +14,7 @@
 struct Win32Input;
 extern struct Win32Input* global_win32_input;
 
-attr_media_api m_uintptr surface_query_memory_requirement(void) {
+attr_media_api uintptr_t surface_query_memory_requirement(void) {
     return sizeof( struct Win32Surface );
 }
 
@@ -41,8 +41,8 @@ attr_internal void win32_surface_flags_to_style(
     *out_dwexstyle = dwexstyle;
 }
 
-attr_media_api m_bool32 surface_create(
-    m_uint32 title_len, const char* title, m_int32 x, m_int32 y, m_int32 w, m_int32 h,
+attr_media_api _Bool surface_create(
+    uint32_t title_len, const char* title, int32_t x, int32_t y, int32_t w, int32_t h,
     SurfaceCreateFlags flags, SurfaceCallbackFN* opt_callback,
     void* opt_callback_params, SurfaceHandle* opt_parent, SurfaceHandle* out_surface
 ) {
@@ -65,7 +65,7 @@ attr_media_api m_bool32 surface_create(
 
     surface->create_flags = flags;
 
-    m_uint32 max_title_len = title_len;
+    uint32_t max_title_len = title_len;
     if( title && title_len ) {
         if( max_title_len > SURFACE_MAX_TITLE_LEN ) {
             max_title_len = SURFACE_MAX_TITLE_LEN;
@@ -93,13 +93,13 @@ attr_media_api m_bool32 surface_create(
     surface->h = h ? h : 600;
 
     if( flags & SURFACE_CREATE_FLAG_X_CENTERED ) {
-        m_int32 monitor_width = monitor.rcMonitor.right - monitor.rcMonitor.left;
+        int32_t monitor_width = monitor.rcMonitor.right - monitor.rcMonitor.left;
         surface->x = monitor.rcMonitor.left + ((monitor_width / 2) - (surface->w / 2));
     } else {
         surface->x = x;
     }
     if( flags & SURFACE_CREATE_FLAG_Y_CENTERED ) {
-        m_int32 monitor_height = monitor.rcMonitor.bottom - monitor.rcMonitor.top;
+        int32_t monitor_height = monitor.rcMonitor.bottom - monitor.rcMonitor.top;
         surface->y = monitor.rcMonitor.top + ((monitor_height / 2) - (surface->h / 2));
     } else {
         surface->y = y;
@@ -177,7 +177,7 @@ attr_media_api void surface_destroy( SurfaceHandle* in_surface ) {
 attr_media_api void surface_pump_events( SurfaceHandle* in_surface ) {
     struct Win32Surface* surface = in_surface;
 
-    m_bool32 is_focused = surface->state & SURFACE_STATE_IS_FOCUSED;
+    _Bool is_focused = surface->state & SURFACE_STATE_IS_FOCUSED;
     HWND     focus      = win32_get_focused_window();
 
     SurfaceCallbackData data;
@@ -227,7 +227,7 @@ attr_media_api void* surface_get_platform_handle( SurfaceHandle* in_surface ) {
     return (void*)surface->hwnd;
 }
 attr_media_api const char* surface_query_title(
-    const SurfaceHandle* in_surface, m_uint32* opt_out_len
+    const SurfaceHandle* in_surface, uint32_t* opt_out_len
 ) {
     const struct Win32Surface* surface = in_surface;
 
@@ -237,7 +237,7 @@ attr_media_api const char* surface_query_title(
     return surface->title_utf8;
 }
 attr_media_api void surface_set_title(
-    SurfaceHandle* in_surface, m_uint32 len, const char* title
+    SurfaceHandle* in_surface, uint32_t len, const char* title
 ) {
     struct Win32Surface* surface = in_surface;
     memset( surface->title_ucs2, 0, WIN32_SURFACE_TITLE_SIZE );
@@ -249,7 +249,7 @@ attr_media_api void surface_set_title(
     SetWindowTextW( surface->hwnd, surface->title_ucs2 );
     memset( surface->title_ucs2, 0, WIN32_SURFACE_TITLE_UCS2_CAP );
 
-    m_uint32 max_len = len;
+    uint32_t max_len = len;
     if( max_len > SURFACE_MAX_TITLE_LEN - 1 ) {
         max_len = SURFACE_MAX_TITLE_LEN - 1;
     }
@@ -258,7 +258,7 @@ attr_media_api void surface_set_title(
     surface->title_len = max_len - 1;
 }
 attr_media_api void surface_query_position(
-    const SurfaceHandle* in_surface, m_int32* out_x, m_int32* out_y
+    const SurfaceHandle* in_surface, int32_t* out_x, int32_t* out_y
 ) {
     const struct Win32Surface* surface = in_surface;
 
@@ -266,7 +266,7 @@ attr_media_api void surface_query_position(
     *out_y = surface->y;
 }
 attr_media_api void surface_set_position(
-    SurfaceHandle* in_surface, m_int32 x, m_int32 y
+    SurfaceHandle* in_surface, int32_t x, int32_t y
 ) {
     struct Win32Surface* surface = in_surface;
     // NOTE(alicia): surface x and y are updated in winproc
@@ -277,7 +277,7 @@ attr_media_api void surface_set_position(
         SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOZORDER );
 }
 attr_media_api void surface_query_dimensions(
-    const SurfaceHandle* in_surface, m_int32* out_w, m_int32* out_h
+    const SurfaceHandle* in_surface, int32_t* out_w, int32_t* out_h
 ) {
     const struct Win32Surface* surface = in_surface;
 
@@ -285,7 +285,7 @@ attr_media_api void surface_query_dimensions(
     *out_h = surface->h;
 }
 attr_media_api void surface_set_dimensions(
-    SurfaceHandle* in_surface, m_int32 w, m_int32 h
+    SurfaceHandle* in_surface, int32_t w, int32_t h
 ) {
     struct Win32Surface* surface = in_surface;
 
@@ -319,11 +319,11 @@ attr_media_api SurfaceStateFlags surface_query_state(
     return surface->state;
 }
 attr_media_api void surface_set_fullscreen(
-    SurfaceHandle* in_surface, m_bool32 is_fullscreen
+    SurfaceHandle* in_surface, _Bool is_fullscreen
 ) {
     struct Win32Surface* surface = in_surface;
 
-    m_bool32 current_fullscreen = (surface->state & SURFACE_STATE_FULLSCREEN);
+    _Bool current_fullscreen = (surface->state & SURFACE_STATE_FULLSCREEN);
 
     if( current_fullscreen == is_fullscreen ) {
         return;
@@ -340,10 +340,10 @@ attr_media_api void surface_set_fullscreen(
         SetWindowLongPtrW( surface->hwnd, GWL_STYLE, WS_POPUP );
         SetWindowLongPtrW( surface->hwnd, GWL_EXSTYLE, 0 );
 
-        m_int32 x = monitor.rcMonitor.left;
-        m_int32 y = monitor.rcMonitor.top;
-        m_int32 w = monitor.rcMonitor.right - monitor.rcMonitor.left;
-        m_int32 h = monitor.rcMonitor.bottom - monitor.rcMonitor.top;
+        int32_t x = monitor.rcMonitor.left;
+        int32_t y = monitor.rcMonitor.top;
+        int32_t w = monitor.rcMonitor.right - monitor.rcMonitor.left;
+        int32_t h = monitor.rcMonitor.bottom - monitor.rcMonitor.top;
 
         SetWindowPos( 
             surface->hwnd, HWND_TOP, 
@@ -370,7 +370,7 @@ attr_media_api void surface_set_fullscreen(
     }
 }
 attr_media_api void surface_set_hidden(
-    SurfaceHandle* in_surface, m_bool32 is_hidden
+    SurfaceHandle* in_surface, _Bool is_hidden
 ) {
     struct Win32Surface* surface = in_surface;
     if( (surface->state & SURFACE_STATE_IS_HIDDEN) == is_hidden ) {
@@ -461,14 +461,14 @@ LRESULT win32_winproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
         } return FALSE;
         case WM_WINDOWPOSCHANGED: {
             WINDOWPOS* pos = (WINDOWPOS*)lparam;
-            m_bool32 no_size = pos->flags & SWP_NOSIZE;
-            m_bool32 no_move = pos->flags & SWP_NOMOVE;
+            _Bool no_size = pos->flags & SWP_NOSIZE;
+            _Bool no_move = pos->flags & SWP_NOMOVE;
             
             if( !no_move ) {
-                m_int32 old_x = surface->x;
-                m_int32 old_y = surface->y;
-                m_int32 x     = pos->x;
-                m_int32 y     = pos->y;
+                int32_t old_x = surface->x;
+                int32_t old_y = surface->y;
+                int32_t x     = pos->x;
+                int32_t y     = pos->y;
 
                 surface->x = x;
                 surface->y = y;
@@ -487,14 +487,14 @@ LRESULT win32_winproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
             }
 
             if( !no_size ) {
-                m_int32 old_w = surface->w;
-                m_int32 old_h = surface->h;
+                int32_t old_w = surface->w;
+                int32_t old_h = surface->h;
 
                 RECT client;
                 memset( &client, 0, sizeof(client) );
                 if( GetClientRect( surface->hwnd, &client ) ) {
-                    m_int32 w = client.right  < 1 ? 1 : client.right;
-                    m_int32 h = client.bottom < 1 ? 1 : client.bottom;
+                    int32_t w = client.right  < 1 ? 1 : client.right;
+                    int32_t h = client.bottom < 1 ? 1 : client.bottom;
 
                     surface->w = w;
                     surface->h = h;
@@ -600,7 +600,7 @@ LRESULT win32_winproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
             case WM_KEYDOWN:
             case WM_KEYUP: {
 
-                m_bool32 prev = (lparam >> 30) == 1;
+                _Bool prev = (lparam >> 30) == 1;
                 if( prev ) {
                     return DefWindowProcW( hwnd, msg, wparam, lparam );
                 }
@@ -623,7 +623,7 @@ LRESULT win32_winproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
                     default: break;
                 }
 
-                m_bool32 is_down = !((lparam & TRANSITION_STATE_MASK) != 0);
+                _Bool is_down = !((lparam & TRANSITION_STATE_MASK) != 0);
                 if( is_down ) {
                     switch( vk_orig ) {
                         case VK_SHIFT: {
@@ -700,7 +700,7 @@ LRESULT win32_winproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
             case WM_RBUTTONUP:
             case WM_MBUTTONDOWN:
             case WM_MBUTTONUP: {
-                m_bool32 is_down =
+                _Bool is_down =
                     msg == WM_LBUTTONDOWN ||
                     msg == WM_MBUTTONDOWN ||
                     msg == WM_RBUTTONDOWN;
@@ -728,7 +728,7 @@ LRESULT win32_winproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
             case WM_XBUTTONDOWN:
             case WM_XBUTTONUP: {
                 UINT button      = GET_XBUTTON_WPARAM(wparam);
-                m_bool32 is_down = msg == WM_XBUTTONDOWN;
+                _Bool is_down = msg == WM_XBUTTONDOWN;
 
                 MouseButton btn = global_win32_state->mb;
                 switch( button ) {

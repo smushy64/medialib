@@ -9,7 +9,7 @@
 #include "media/types.h"
 
 /// @brief Key modifiers bitfield.
-typedef enum KeyboardMod : m_uint8 {
+typedef enum KeyboardMod : uint8_t {
     /// @brief Left/right shift key is down.
     KBMOD_SHIFT  = (1 << 0),
     /// @brief Left/right control key is down.
@@ -28,7 +28,7 @@ typedef enum KeyboardMod : m_uint8 {
 /// US QWERTY keyboard. On other keyboard layouts, they may map to
 /// a different key name but keep the same relative layout.
 /// As an example: WASD in QWERTY maps to ZQSD in AZERTY.
-typedef enum KeyboardCode : m_uint8 {
+typedef enum KeyboardCode : uint8_t {
     /// @brief Unknown key.
     KB_UNKNOWN,
 
@@ -286,11 +286,11 @@ typedef enum KeyboardCode : m_uint8 {
 /// @brief Packed boolean structure representing all key states.
 typedef struct KeyboardState {
     /// @brief Packed boolean array.
-    m_bool8 keys[(KB_COUNT / 8) + ((KB_COUNT % 8) ? 1 : 0)];
+    uint8_t keys[(KB_COUNT / 8) + ((KB_COUNT % 8) ? 1 : 0)];
 } KeyboardState;
 
 attr_header const char* keyboard_code_to_string(
-    KeyboardCode code, m_uintptr* opt_out_len
+    KeyboardCode code, uintptr_t* opt_out_len
 ) {
     #define result( text ) {\
         if( opt_out_len ) {\

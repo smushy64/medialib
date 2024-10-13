@@ -18,7 +18,7 @@
 #include <initguid.h>
 
 struct Win32State* global_win32_state = NULL;
-m_bool32 global_win32_cursor_hidden   = false;
+_Bool global_win32_cursor_hidden   = false;
 HCURSOR global_win32_cursors[CURSOR_TYPE_COUNT];
 
 // NOTE(alicia): always request discrete graphics.
@@ -95,10 +95,10 @@ attr_internal void win32_unload_modules(void) {
     }
 }
 
-attr_media_api m_uintptr media_lib_query_memory_requirement(void) {
+attr_media_api uintptr_t media_lib_query_memory_requirement(void) {
     return sizeof(struct Win32State);
 }
-attr_media_api m_bool32 media_lib_initialize(
+attr_media_api _Bool media_lib_initialize(
     MediaLoggingLevel       log_level,
     MediaLoggingCallbackFN* opt_log_callback,
     void*                   opt_log_callback_params,
@@ -238,9 +238,9 @@ attr_media_api m_bool32 media_lib_initialize(
     global_win32_cursors[CURSOR_TYPE_SIZE_L]     = LoadCursorA( NULL, IDC_SIZENWSE );
     global_win32_cursors[CURSOR_TYPE_SIZE_R]     = LoadCursorA( NULL, IDC_SIZENESW );
 
-    m_bool32 caps   = GetKeyState( VK_CAPITAL ) & 0x0001;
-    m_bool32 scroll = GetKeyState( VK_SCROLL )  & 0x0001;
-    m_bool32 num    = GetKeyState( VK_NUMLOCK ) & 0x0001;
+    _Bool caps   = GetKeyState( VK_CAPITAL ) & 0x0001;
+    _Bool scroll = GetKeyState( VK_SCROLL )  & 0x0001;
+    _Bool num    = GetKeyState( VK_NUMLOCK ) & 0x0001;
 
     global_win32_state->mod |= caps   ? KBMOD_CAPSLK : 0;
     global_win32_state->mod |= scroll ? KBMOD_SCRLK  : 0;
@@ -263,12 +263,12 @@ attr_media_api void media_lib_shutdown(void) {
     global_win32_state = NULL;
 }
 
-attr_media_api void cursor_set_visible( m_bool32 is_visible ) {
+attr_media_api void cursor_set_visible( _Bool is_visible ) {
     global_win32_cursor_hidden = !is_visible;
 }
 
 wchar_t* win32_utf8_to_ucs2_alloc(
-    m_uint32 utf8_len, const char* utf8, m_uint32* opt_out_len
+    uint32_t utf8_len, const char* utf8, uint32_t* opt_out_len
 ) {
     int required_len = MultiByteToWideChar( CP_UTF8, 0, utf8, utf8_len, 0, 0 );
     wchar_t* res = HeapAlloc( 
@@ -312,7 +312,7 @@ HWND win32_get_focused_window(void) {
 }
 
 void win32_error_message_full(
-    DWORD error_code, m_uint32 message_len, const char* message
+    DWORD error_code, uint32_t message_len, const char* message
 ) {
     unused( error_code, message_len, message );
 #if defined(MEDIA_ENABLE_LOGGING)
@@ -322,8 +322,8 @@ void win32_error_message_full(
 
     #define prefix "win32: "
 
-    m_uint32 buffer_size = message_len + sizeof(prefix) + 256 + 8;
-    m_uint32 buffer_len  = 0;
+    uint32_t buffer_size = message_len + sizeof(prefix) + 256 + 8;
+    uint32_t buffer_len  = 0;
 
     char* buffer = HeapAlloc( GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size );
     memcpy( buffer, prefix, sizeof(prefix) );

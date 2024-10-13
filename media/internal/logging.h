@@ -10,7 +10,7 @@
 #include "media/types.h"
 #include "media/lib.h"
 
-void media_log( enum MediaLoggingLevel level, m_uint32 len, const char* message );
+void media_log( enum MediaLoggingLevel level, uint32_t len, const char* message );
 
 #if defined(MEDIA_ENABLE_LOGGING)
 

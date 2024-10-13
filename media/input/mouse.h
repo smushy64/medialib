@@ -9,7 +9,7 @@
 #include "media/types.h"
 
 /// @brief Mouse Buttons bitfield.
-typedef enum MouseButton : m_uint8 {
+typedef enum MouseButton : uint8_t {
     /// @brief Left mouse button.
     MB_LEFT    = (1 << 0),
     /// @brief Middle mouse button.

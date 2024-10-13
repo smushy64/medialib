@@ -11,20 +11,20 @@
 
 #include <shobjidl.h>
 
-attr_internal m_uint32 win32_count_filters( m_uint32 filter_len, const char* filter );
+attr_internal uint32_t win32_count_filters( uint32_t filter_len, const char* filter );
 attr_internal void win32_clip_filter(
-    m_uint32 filter_len, const char* filter,
-    m_uint32* out_filter_len );
-attr_internal m_bool32 win32_clip_filter_name(
-    m_uint32 filter_len, const char* filter,
-    m_uint32* out_filter_len );
+    uint32_t filter_len, const char* filter,
+    uint32_t* out_filter_len );
+attr_internal _Bool win32_clip_filter_name(
+    uint32_t filter_len, const char* filter,
+    uint32_t* out_filter_len );
 attr_internal COMDLG_FILTERSPEC* win32_make_filters(
-    m_uint32 filter_len, const char* filter, m_uint32* out_count );
+    uint32_t filter_len, const char* filter, uint32_t* out_count );
 attr_internal void win32_free_filters( COMDLG_FILTERSPEC* filters );
 
 attr_media_api PromptMessageResult prompt_message(
-    m_uint32 opt_title_len, const char* opt_title,
-    m_uint32 message_len, const char* message,
+    uint32_t opt_title_len, const char* opt_title,
+    uint32_t message_len, const char* message,
     PromptMessageType type, PromptMessageOptions options
 ) {
     if( !message || !message_len ) {
@@ -32,7 +32,7 @@ attr_media_api PromptMessageResult prompt_message(
         return PROMPT_MESSAGE_ERROR_UNKNOWN;
     }
 
-    m_uint32 wide_buffer_cap = 2;
+    uint32_t wide_buffer_cap = 2;
     if( opt_title && opt_title_len ) {
         wide_buffer_cap +=
             MultiByteToWideChar( CP_UTF8, 0, opt_title, opt_title_len, 0, 0 );
@@ -40,7 +40,7 @@ attr_media_api PromptMessageResult prompt_message(
     wide_buffer_cap +=
         MultiByteToWideChar( CP_UTF8, 0, message, message_len, 0, 0 );
 
-    m_uint32 wide_buffer_size = sizeof(wchar_t) * wide_buffer_cap;
+    uint32_t wide_buffer_size = sizeof(wchar_t) * wide_buffer_cap;
 
     void* wide_buffer =
         HeapAlloc( GetProcessHeap(), HEAP_ZERO_MEMORY, wide_buffer_size );
@@ -118,12 +118,12 @@ attr_media_api PromptMessageResult prompt_message(
 }
 
 attr_media_api PromptFileOpenResult prompt_file_open(
-    m_uint32 opt_title_len,
+    uint32_t opt_title_len,
     const char* opt_title,
-    m_uint32 opt_ext_filters_len,
+    uint32_t opt_ext_filters_len,
     const char* opt_ext_filters,
-    m_uint32 result_buffer_cap,
-    m_uint32* out_result_len,
+    uint32_t result_buffer_cap,
+    uint32_t* out_result_len,
     char* out_result_buffer
 ) {
     wchar_t* title = NULL;
@@ -145,7 +145,7 @@ attr_media_api PromptFileOpenResult prompt_file_open(
         }\
     } while(0)
 
-    m_uint32 filter_count = 0;
+    uint32_t filter_count = 0;
     COMDLG_FILTERSPEC* filter = NULL;
     if( opt_ext_filters ) {
         filter = win32_make_filters(
@@ -255,12 +255,12 @@ attr_media_api PromptFileOpenResult prompt_file_open(
     #undef free_title
     return result;
 }
-attr_internal m_uint32 win32_count_filters( m_uint32 filter_len, const char* filter ) {
+attr_internal uint32_t win32_count_filters( uint32_t filter_len, const char* filter ) {
     if( !filter_len ) {
         return 0;
     }
-    m_uint32 res = 0;
-    for( m_uint32 i = 0; i < filter_len; ++i ) {
+    uint32_t res = 0;
+    for( uint32_t i = 0; i < filter_len; ++i ) {
         if( filter[i] == ';' ) {
             res++;
         }
@@ -268,10 +268,10 @@ attr_internal m_uint32 win32_count_filters( m_uint32 filter_len, const char* fil
     return res ? res : 1;
 }
 attr_internal void win32_clip_filter(
-    m_uint32 filter_len, const char* filter,
-    m_uint32* out_filter_len
+    uint32_t filter_len, const char* filter,
+    uint32_t* out_filter_len
 ) {
-    for( m_uint32 i = 0; i < filter_len; ++i ) {
+    for( uint32_t i = 0; i < filter_len; ++i ) {
         if( filter[i] == ';' ) {
             *out_filter_len = i;
             return;
@@ -280,11 +280,11 @@ attr_internal void win32_clip_filter(
 
     *out_filter_len = filter_len;
 }
-attr_internal m_bool32 win32_clip_filter_name(
-    m_uint32 filter_len, const char* filter,
-    m_uint32* out_filter_len
+attr_internal _Bool win32_clip_filter_name(
+    uint32_t filter_len, const char* filter,
+    uint32_t* out_filter_len
 ) {
-    for( m_uint32 i = 0; i < filter_len; ++i ) {
+    for( uint32_t i = 0; i < filter_len; ++i ) {
         if( filter[i] == ':' ) {
             *out_filter_len = i;
             return true;
@@ -295,19 +295,19 @@ attr_internal m_bool32 win32_clip_filter_name(
 }
 
 attr_internal COMDLG_FILTERSPEC* win32_make_filters(
-    m_uint32 filter_len, const char* filter, m_uint32* out_count
+    uint32_t filter_len, const char* filter, uint32_t* out_count
 ) {
-    m_uint32 filter_count = win32_count_filters( filter_len, filter );
+    uint32_t filter_count = win32_count_filters( filter_len, filter );
     if( !filter_count ) {
         win32_warn( "prompt_file_open: couldn't count filters!" );
         return NULL;
     }
 
-    m_uint32 wide_filter_len =
+    uint32_t wide_filter_len =
         MultiByteToWideChar( CP_UTF8, 0, filter, filter_len, 0, 0 );
 
-    m_uint32 wide_buf_cap = wide_filter_len + 8;
-    m_uint32 buffer_size =
+    uint32_t wide_buf_cap = wide_filter_len + 8;
+    uint32_t buffer_size =
         (sizeof(wchar_t) * wide_buf_cap) +
         (sizeof(COMDLG_FILTERSPEC) * filter_count);
     void* buffer = HeapAlloc( GetProcessHeap(), HEAP_ZERO_MEMORY, buffer_size );
@@ -320,18 +320,18 @@ attr_internal COMDLG_FILTERSPEC* win32_make_filters(
     COMDLG_FILTERSPEC* filters  = buffer;
     wchar_t* filter_text_buffer = (wchar_t*)(filters + filter_count);
 
-    m_uint32    filter_slice_len = filter_len;
+    uint32_t    filter_slice_len = filter_len;
     const char* filter_slice     = filter;
 
-    m_uint32 final_count = 0;
-    for( m_uint32 i = 0; i < filter_count; ++i ) {
+    uint32_t final_count = 0;
+    for( uint32_t i = 0; i < filter_count; ++i ) {
         if( !(filter_slice_len && wide_buf_cap) ) {
             break;
         }
 
-        m_uint32 current_slice_len = 0;
+        uint32_t current_slice_len = 0;
         const char* current_filter_start = 0;
-        m_uint32 current_filter_name_len = 0;
+        uint32_t current_filter_name_len = 0;
 
         win32_clip_filter( 
             filter_slice_len, filter_slice,
@@ -350,7 +350,7 @@ attr_internal COMDLG_FILTERSPEC* win32_make_filters(
 
             current_filter_start = 
                 filter_slice + current_filter_name_len + 1;
-            m_uint32 current_filter_len = 
+            uint32_t current_filter_len = 
                 current_slice_len - (current_filter_name_len + 1);
             if( !current_filter_len ) {
                 goto win32_make_filters_skip_filter;

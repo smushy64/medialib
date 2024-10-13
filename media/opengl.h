@@ -65,7 +65,7 @@ typedef enum OpenGLAttribute {
     OPENGL_ATTR_FORWARD_COMPATIBILITY,
 } OpenGLAttribute;
 /// @brief OpenGL attributes.
-typedef struct { m_uint8 raw[sizeof(int) * 16]; } OpenGLAttributeList;
+typedef struct { uint8_t raw[sizeof(int) * 16]; } OpenGLAttributeList;
 /// @brief Create default OpenGL attributes array.
 ///
 /// Must be destroyed with opengl_attr_destroy() to prevent memory leak.
@@ -77,7 +77,7 @@ attr_media_api OpenGLAttributeList opengl_attr_create(void);
 /// @param value Value to set attribute.
 /// @return True if value was valid.
 /// @see OpenGLAttribute
-attr_media_api m_bool32 opengl_attr_set(
+attr_media_api _Bool opengl_attr_set(
     OpenGLAttributeList* attr, OpenGLAttribute name, int value );
 /// @brief Get value of an OpenGL attribute.
 /// @param[in] attr Attributes array.
@@ -85,14 +85,14 @@ attr_media_api m_bool32 opengl_attr_set(
 /// @return 
 ///     - positive: Value of requested attribute.
 ///     - negative: @c name is not recognized.
-attr_media_api m_int32 opengl_attr_get(
+attr_media_api int32_t opengl_attr_get(
     OpenGLAttributeList* attr, OpenGLAttribute name );
 
 /// @brief Initialize OpenGL.
 ///
 /// @warning MUST be called before any other OpenGL-related functions!
 /// @return True if successful.
-attr_media_api m_bool32 opengl_initialize(void);
+attr_media_api _Bool opengl_initialize(void);
 /// @brief Create an OpenGL render context for surface.
 /// @param[in] surface Surface to create OpenGL render context for.
 /// @param[in] opt_attributes (optional) Attributes. If NULL, uses default attributes.
@@ -106,7 +106,7 @@ attr_media_api OpenGLRenderContext* opengl_context_create(
 /// @param[in] surface Surface to set context to.
 /// @param[in] glrc OpenGL render context to modify.
 /// @return True if successful.
-attr_media_api m_bool32 opengl_context_bind(
+attr_media_api _Bool opengl_context_bind(
     SurfaceHandle* surface, OpenGLRenderContext* glrc );
 /// @brief Unbind calling thread's render context.
 attr_header
@@ -127,7 +127,7 @@ attr_media_api void opengl_context_destroy( OpenGLRenderContext* glrc );
 /// @return
 /// - @c true if both contexts were created with the same attributes.
 /// - @c false if contexts were created with different attributes.
-attr_media_api m_bool32 opengl_context_share(
+attr_media_api _Bool opengl_context_share(
     OpenGLRenderContext* a, OpenGLRenderContext* b );
 /// @brief OpenGL function loading procedure.
 /// @param[in] function_name Name of function to load.
@@ -136,7 +136,7 @@ attr_media_api void* opengl_load_proc( const char* function_name );
 /// @brief Swap back/front buffers after drawing finished.
 /// @param[in] surface Surface to swap buffers for.
 /// @return True if successful.
-attr_media_api m_bool32 opengl_swap_buffers( SurfaceHandle* surface );
+attr_media_api _Bool opengl_swap_buffers( SurfaceHandle* surface );
 /// @brief Set swap interval (Vsync).
 ///
 /// - @c 0 V-sync off.
@@ -145,7 +145,7 @@ attr_media_api m_bool32 opengl_swap_buffers( SurfaceHandle* surface );
 /// @param[in] surface Surface to set swap interval for.
 /// @param interval Interval to set.
 /// @return True if successful.
-attr_media_api m_bool32 opengl_swap_interval(
+attr_media_api _Bool opengl_swap_interval(
     SurfaceHandle* surface, int interval );
 
 #endif /* header guard */

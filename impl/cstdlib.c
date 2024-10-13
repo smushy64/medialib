@@ -9,32 +9,32 @@
 
 attr_clink
 void* memcpy(
-    void* attr_restrict dst, const void* attr_restrict src, m_uintptr size
+    void* attr_restrict dst, const void* attr_restrict src, uintptr_t size
 ) {
-    for( m_uintptr i = 0; i < size; ++i ) {
-        ((m_uint8*)dst)[i] = ((m_uint8*)src)[i];
+    for( uintptr_t i = 0; i < size; ++i ) {
+        ((uint8_t*)dst)[i] = ((uint8_t*)src)[i];
     }
     return dst;
 }
 attr_clink
-void* memset( void* dst, int val, m_uintptr size ) {
-    for( m_uintptr i = 0; i < size; ++i ) {
-        *((m_int8*)dst + i) = val;
+void* memset( void* dst, int val, uintptr_t size ) {
+    for( uintptr_t i = 0; i < size; ++i ) {
+        *((int8_t*)dst + i) = val;
     }
     return dst;
 }
 attr_clink
-void* memmove( void* str1, const void* str2, m_uintptr n ) {
+void* memmove( void* str1, const void* str2, uintptr_t n ) {
     if( !n ) {
         return str1;
     }
     if( str1 < str2 ) {
         return memcpy( str1, str2, n );
     }
-    m_uint8* a = str1;
-    const m_uint8* b = str2;
+    uint8_t* a = str1;
+    const uint8_t* b = str2;
 
-    for( m_uintptr i = n; i-- > 0; ) {
+    for( uintptr_t i = n; i-- > 0; ) {
         a[i] = b[i];
     }
 

@@ -159,9 +159,7 @@ attr_media_api _Bool surface_create(
         surface->state |= SURFACE_STATE_IS_HIDDEN;
     } else {
         ShowWindow( surface->hwnd, SW_SHOW );
-        surface->state |= SURFACE_STATE_IS_FOCUSED;
     }
-
 
     return true;
 }
@@ -169,43 +167,14 @@ attr_media_api void surface_destroy( SurfaceHandle* in_surface ) {
     struct Win32Surface* surface = in_surface;
 
     ReleaseDC( surface->hwnd, surface->hdc );
-
     DestroyWindow( surface->hwnd );
 
     memset( surface, 0, sizeof(*surface) );
 }
-attr_media_api void surface_pump_events( SurfaceHandle* in_surface ) {
-    struct Win32Surface* surface = in_surface;
-
-    _Bool is_focused = surface->state & SURFACE_STATE_IS_FOCUSED;
-    HWND     focus      = win32_get_focused_window();
-
-    SurfaceCallbackData data;
-    memset( &data, 0, sizeof(data) );
-
-    if( focus == surface->hwnd ) {
-        if( !is_focused ) {
-            surface->state |= SURFACE_STATE_IS_FOCUSED;
-            if( surface->callback ) {
-                data.type         = SURFACE_CALLBACK_TYPE_FOCUS;
-                data.focus.gained = true;
-                surface->callback( surface, &data, surface->callback_params );
-            }
-        }
-    } else {
-        if( is_focused ) {
-            surface->state &= ~SURFACE_STATE_IS_FOCUSED;
-            if( surface->callback ) {
-                data.type         = SURFACE_CALLBACK_TYPE_FOCUS;
-                data.focus.gained = false;
-                surface->callback( surface, &data, surface->callback_params );
-            }
-        }
-    }
-
+attr_media_api void surface_pump_events(void) {
     MSG message;
     memset( &message, 0, sizeof(message) );
-    while( PeekMessageW( &message, surface->hwnd, 0, 0, PM_REMOVE ) ) {
+    while( PeekMessageW( &message, 0, 0, 0, PM_REMOVE ) ) {
         TranslateMessage( &message );
         DispatchMessageW( &message );
     }
@@ -397,6 +366,7 @@ LRESULT win32_winproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
     memset( &data, 0, sizeof(data) );
     #define cb() surface->callback( surface, &data, surface->callback_params )
 
+    _Bool activated;
     switch( msg ) {
         case WM_SETCURSOR: {
             CursorType cursor = CURSOR_TYPE_ARROW;
@@ -430,6 +400,22 @@ LRESULT win32_winproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
                 SetCursor( global_win32_cursors[cursor] );
             }
         } return TRUE;
+        case WM_ACTIVATE: {
+            if( LOWORD( wparam ) ) {
+                activated = true;
+            } else {
+                activated = false;
+            }
+            if( activated == ((surface->state & SURFACE_STATE_IS_FOCUSED) != 0)) {
+                return 0;
+            }
+
+            if( activated ) {
+                surface->state |= SURFACE_STATE_IS_FOCUSED;
+            } else {
+                surface->state &= ~SURFACE_STATE_IS_FOCUSED;
+            }
+        } break;
         default: break;
     }
 
@@ -440,6 +426,11 @@ LRESULT win32_winproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
     switch( msg ) {
         case WM_CLOSE: {
             data.type = SURFACE_CALLBACK_TYPE_CLOSE;
+            cb();
+        } return 0;
+        case WM_ACTIVATE: {
+            data.type = SURFACE_CALLBACK_TYPE_FOCUS;
+            data.focus.gained = activated;
             cb();
         } return 0;
         case WM_CHAR: {

@@ -263,9 +263,7 @@ attr_media_api _Bool surface_create(
 /// @param[in] surface Handle to surface to destroy.
 attr_media_api void surface_destroy( SurfaceHandle* surface );
 /// @brief Process surface events.
-/// @warning Only the thread that created the surface should call this function.
-/// @param[in] surface Surface whose events should be processed.
-attr_media_api void surface_pump_events( SurfaceHandle* surface );
+attr_media_api void surface_pump_events(void);
 /// @brief Set surface callback function.
 /// @param[in] surface             Surface to set callback for.
 /// @param     callback            Surface callback function.

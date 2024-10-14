@@ -20,6 +20,7 @@ Indicates additions to API, minor bug fixes and other small changes.
 
 0.1.1
 -----
+- surface: made surface_pump_events() global. (thanks, X11)
 - everything: updated to use stdint and stdbool types.
 - types: changed typedefs to just use stdint and stdbool.
 - defines: finished added define guards for attributes that corelib also defines.

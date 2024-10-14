@@ -20,6 +20,9 @@ Indicates additions to API, minor bug fixes and other small changes.
 
 0.1.1
 -----
+- tests: updated to use stdint and stdbool types.
+- cbuild: copied latest version.
+- cbuild: completely rewritten and now has flags for posix platforms.
 - surface: made surface_pump_events() global. (thanks, X11)
 - everything: updated to use stdint and stdbool types.
 - types: changed typedefs to just use stdint and stdbool.

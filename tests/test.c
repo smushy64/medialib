@@ -1,4 +1,5 @@
 // IWYU pragma: begin_keep
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,7 +16,7 @@
 #define text( lit ) sizeof(lit) - 1, lit
 
 void logging_callback(
-    MediaLoggingLevel level, m_uint32 len, const char* message, void* params
+    MediaLoggingLevel level, uint32_t len, const char* message, void* params
 ) {
     unused(params);
     switch( level ) {
@@ -30,13 +31,13 @@ void logging_callback(
     }
     printf( "%.*s\n", len, message );
 }
-static m_bool32 is_focused = true;
+static bool is_focused = true;
 void surface_callback(
     const SurfaceHandle* surface,
     const SurfaceCallbackData* data,
     void* params
 ) {
-    m_bool32* is_running = params;
+    bool* is_running = params;
 
     const char* title = surface_query_title( surface, NULL );
 
@@ -66,11 +67,11 @@ void surface_callback(
                 return;
             }
 
-            m_bool32 L  = data->mouse_button.state & MB_LEFT;
-            m_bool32 M  = data->mouse_button.state & MB_MIDDLE;
-            m_bool32 R  = data->mouse_button.state & MB_RIGHT;
-            m_bool32 X1 = data->mouse_button.state & MB_EXTRA_1;
-            m_bool32 X2 = data->mouse_button.state & MB_EXTRA_2;
+            bool L  = data->mouse_button.state & MB_LEFT;
+            bool M  = data->mouse_button.state & MB_MIDDLE;
+            bool R  = data->mouse_button.state & MB_RIGHT;
+            bool X1 = data->mouse_button.state & MB_EXTRA_1;
+            bool X2 = data->mouse_button.state & MB_EXTRA_2;
 
             unused( L, M, R, X1, X2 );
 
@@ -125,10 +126,10 @@ int main( int argc, char** argv ) {
     SetConsoleOutputCP( CP_UTF8 );
 #endif
 
-    m_uintptr lib_size     = media_lib_query_memory_requirement();
-    m_uintptr surface_size = surface_query_memory_requirement();
-    m_uintptr input_size   = input_subsystem_query_memory_requirement();
-    m_uintptr buf_size =
+    uintptr_t lib_size     = media_lib_query_memory_requirement();
+    uintptr_t surface_size = surface_query_memory_requirement();
+    uintptr_t input_size   = input_subsystem_query_memory_requirement();
+    uintptr_t buf_size =
         input_size +
         lib_size   +
         surface_size;
@@ -144,7 +145,7 @@ int main( int argc, char** argv ) {
         return -1;
     }
 
-    SurfaceHandle* surface = (m_uint8*)lib_buf + lib_size;
+    SurfaceHandle* surface = (uint8_t*)lib_buf + lib_size;
 
     void* input_buf = (void*)surface + surface_size;
 
@@ -158,20 +159,20 @@ int main( int argc, char** argv ) {
         return -1;
     }
 
-    m_uintptr audio_device_list_size   = audio_device_list_query_memory_requirement();
+    uintptr_t audio_device_list_size   = audio_device_list_query_memory_requirement();
     AudioDeviceList* audio_device_list = malloc( audio_device_list_size );
     memset( audio_device_list, 0, audio_device_list_size );
 
     audio_device_list_create( audio_device_list );
 
-    m_uint32 input_devices = audio_device_list_query_count(
+    uint32_t input_devices = audio_device_list_query_count(
         audio_device_list, AUDIO_DEVICE_TYPE_INPUT );
 
     printf( "input devices:\n" );
-    for( m_uint32 i = 0; i < input_devices; ++i ) {
+    for( uint32_t i = 0; i < input_devices; ++i ) {
         char name[260];
         memset( name, 0, sizeof(name) );
-        m_uint32 len = 0;
+        uint32_t len = 0;
 
         if( audio_device_list_query_name(
             audio_device_list, AUDIO_DEVICE_TYPE_INPUT, i, name, &len
@@ -180,14 +181,14 @@ int main( int argc, char** argv ) {
         }
     }
 
-    m_uint32 output_devices = audio_device_list_query_count(
+    uint32_t output_devices = audio_device_list_query_count(
         audio_device_list, AUDIO_DEVICE_TYPE_OUTPUT );
 
     printf( "output devices:\n" );
-    for( m_uint32 i = 0; i < output_devices; ++i ) {
+    for( uint32_t i = 0; i < output_devices; ++i ) {
         char name[260];
         memset( name, 0, sizeof(name) );
-        m_uint32 len = 0;
+        uint32_t len = 0;
 
         if( audio_device_list_query_name(
             audio_device_list, AUDIO_DEVICE_TYPE_OUTPUT, i, name, &len
@@ -197,7 +198,7 @@ int main( int argc, char** argv ) {
     }
     printf( "    %u: default\n", output_devices );
 
-    m_uintptr audio_device_size = audio_device_query_memory_requirement();
+    uintptr_t audio_device_size = audio_device_query_memory_requirement();
     AudioDevice* audio_device   = malloc( audio_device_size );
     memset( audio_device, 0, audio_device_size );
 
@@ -225,9 +226,9 @@ int main( int argc, char** argv ) {
     flags |= SURFACE_CREATE_FLAG_X_CENTERED;
     flags |= SURFACE_CREATE_FLAG_Y_CENTERED;
 
-    m_bool32 is_running = true;
+    bool is_running = true;
 
-    m_bool32 res = surface_create(
+    bool res = surface_create(
         text("Test Surface"),
         0, 0,
         0, 0,
@@ -265,7 +266,7 @@ int main( int argc, char** argv ) {
 
     double last_ms = get_ms();
 
-    m_uintptr channel_sample_size =
+    uint32_t channel_sample_size =
         (format.bits_per_sample / 8);
     printf( "channel_sample_size: %u\n", channel_sample_size );
 
@@ -277,7 +278,7 @@ int main( int argc, char** argv ) {
     double offset2 = 1.3;
 
     const double tone_hz = 256.0;
-    m_int16 tone_volume  = 3000;
+    int16_t tone_volume  = 3000;
 
     printf( "tone volume: %i\n", tone_volume );
 
@@ -291,16 +292,16 @@ int main( int argc, char** argv ) {
         return -1;
     }
 
-    m_bool32 lock    = false;
+    bool lock    = false;
     while( is_running ) {
         input_subsystem_update();
-        surface_pump_events( surface );
+        surface_pump_events();
 
-        m_int32 x, y;
+        int32_t x, y;
         input_mouse_query_position( &x, &y );
         input_mouse_position_to_client( surface, &x, &y );
 
-        m_int32 w, h;
+        int32_t w, h;
         surface_query_dimensions( surface, &w, &h );
 
         if( x > 0 && x < w && y > 0 && y < h ) {
@@ -335,10 +336,10 @@ int main( int argc, char** argv ) {
         struct AudioBuffer buf;
         memset( &buf, 0, sizeof(buf) );
         if( audio_device_buffer_lock( audio_device, &buf ) ) {
-            m_int16* out = buf.start;
-            for( m_uint32 sample = 0; sample < buf.sample_count; ++sample ) {
+            int16_t* out = buf.start;
+            for( uint32_t sample = 0; sample < buf.sample_count; ++sample ) {
                 double sine_sample = sinf( t_sine );
-                m_int16 sample_value = (m_int16)(sine_sample * tone_volume);
+                int16_t sample_value = (int16_t)(sine_sample * tone_volume);
 
                 switch( format.bits_per_sample ) {
                     case 16: {

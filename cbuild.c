@@ -6,948 +6,947 @@
 */
 #include "cbuild.h"
 #include <unistd.h>
-#define println( format, args... ) printf( format "\n", ##args )
 
 #define MEDIA_LIB_VERSION_MAJOR 0
 #define MEDIA_LIB_VERSION_MINOR 1
-#define MEDIA_LIB_VERSION_PATCH 0
+#define MEDIA_LIB_VERSION_PATCH 1
 
-enum Mode {
+#define ARGS_OPT    "-O2"
+#define ARGS_NO_OPT "-O0"
+
+#define ARGS_WARN "-Wall", "-Wextra", "-Werror=vla", "-Werror"
+
+#if defined(PLATFORM_WINDOWS)
+    #define SO_EXT  ".dll"
+    #define EXE_EXT ".exe"
+
+    #define ARGS_WITH_SYMBOLS_STATIC "-g"
+    #define ARGS_WITH_SYMBOLS        "-g", "-gcodeview", "-fuse-ld=lld", "-Wl,/debug"
+
+    #define ARGS_LINK "-lkernel32", "-nostdlib"
+
+    #define ARGS_LD "-shared"
+#else
+    #define SO_EXT  ".so"
+    #define EXE_EXT ""
+
+    #define ARGS_WITH_SYMBOLS_STATIC "-ggdb"
+    #define ARGS_WITH_SYMBOLS        "-ggdb"
+    
+    #define ARGS_LINK "-lSDL3"
+
+    #define ARGS_LD   "-fPIC", "-shared"
+#endif
+
+#define STATIC_EXT ".o"
+
+#define TEST_PATH "./build/libmedia-test" EXE_EXT
+
+typedef enum Mode {
     M_HELP,
     M_BUILD,
-    M_DOCS,
     M_TEST,
+    M_DOCS,
     M_LSP,
 
     M_COUNT
-};
-const char* mode_to_string( enum Mode mode, usize* opt_out_len );
-b32 mode_parse( string str, enum Mode* out_mode );
+} Mode;
+String mode_to_str( Mode mode );
+bool mode_from_str( String str, Mode* out_mode );
+String mode_description( Mode mode );
 
-enum Target {
+typedef enum Target {
     T_NATIVE,
-};
-const char* target_to_string( enum Target target, usize* opt_out_len );
-b32 target_parse( string str, enum Target* out_target );
 
-struct Arguments {
-    enum Mode mode;
+    T_COUNT
+} Target;
+String target_to_str( Target target );
+bool target_from_str( String str, Target* out_target );
+
+typedef enum Platform {
+    P_WINDOWS,
+    P_LINUX,
+    P_MACOS,
+
+    P_UNKNOWN
+} Platform;
+Platform platform_current(void);
+String platform_friendly_name( Platform platform );
+String platform_name( Platform platform );
+
+typedef struct ParsedArgs {
+    Mode mode;
     union {
-        struct HelpArguments {
-            enum Mode mode;
+        struct HelpArgs {
+            Mode mode;
         } help;
-        struct BuildArguments {
-            string output;
-            enum Target target;
-            b32 release;
-            b32 optimized;
-            b32 strip_symbols;
-            b32 is_static;
-            b32 enable_logging;
-            b32 dry;
+        struct BuildArgs {
+            const char* name;
+            const char* output;
+            Target      target;
+            bool        release;
+            bool        strip_symbols;
+            bool        is_static;
+            bool        dry;
         } build;
-        struct DocsArguments {
-            struct BuildArguments build;
-            b32 launch_browser;
-        } docs;
-        struct TestArguments {
-            struct BuildArguments build;
-            int passthrough_start;
+        struct TestArgs {
+            struct BuildArgs build;
+            int          start;
+            int          argc;
+            const char** argv;
         } test;
-        struct LspArguments {
-            struct BuildArguments build;
+        struct DocsArgs {
+            struct BuildArgs build;
+            bool             launch_browser;
+        } docs;
+        struct LspArgs {
+            struct BuildArgs build;
         } lsp;
     };
-};
-void print_arguments( const struct Arguments* args );
+} ParsedArgs;
 
-b32 parse_arguments( int argc, char** argv, struct Arguments* out_args );
+int mode_help( ParsedArgs* args );
+int mode_build( struct BuildArgs* args, CommandBuilder* opt_out_builder );
+int mode_test( struct TestArgs* args );
+int mode_docs( struct DocsArgs* args );
+int mode_lsp( struct LspArgs* args );
 
-void mode_help( enum Mode mode );
-int mode_build( struct BuildArguments* build );
-int mode_test( int argc, char** argv, struct TestArguments* test );
-int mode_docs( struct DocsArguments* docs );
-int mode_lsp( struct LspArguments* lsp );
-
-int main( int argc, char** argv ) {
+int main( int argc, const char** argv ) {
     init( LOGGER_LEVEL_INFO );
 
-    struct Arguments args;
-    memory_set( &args, 0, sizeof(args) );
-    if( !parse_arguments( argc, argv, &args ) ) {
-        return -1;
-    }
-
-    int result = 0;
-    switch( args.mode ) {
-        case M_HELP: {
-            mode_help( args.help.mode );
-        } break;
-        case M_BUILD: {
-            result = mode_build( &args.build );
-        } break;
-        case M_TEST: {
-            result = mode_build( &args.build );
-            if( !result ) {
-                result = mode_test( argc, argv, &args.test );
-            }
-        } break;
-        case M_DOCS: {
-            result = mode_docs( &args.docs );
-        } break;
-        case M_LSP: {
-            result = mode_lsp( &args.lsp );
-        } break;
-        case M_COUNT:
-            return -1;
-    }
-
-    return result;
-}
-int mode_build( struct BuildArguments* build ) {
-    // TODO(alicia): linux flags
-
-    if( !build->dry ) {
-        if( !process_in_path( "clang") ) {
-            cb_error( "build: 'clang' not found in path!");
-            return -1;
-        }
-    }
-
-    const char* path_command_line = "generated/medialib_command_line.c";
-
-    dstring* output = dstring_fmt(
-        "%.*s/libmedia.%s", build->output.len, build->output.cc,
-        build->is_static ? "o" : "dll" );
-    if( !output ) {
-        cb_error( "build: failed to create output path!" );
-        return -1;
-    }
-    if( !build->dry ) {
-        cb_info( "build: compiling '%s' . . .", output );
-    }
-
-    CommandBuilder builder;
-    if( !command_builder_new( "clang", &builder ) ) {
-        cb_error( "build: failed to create command builder!" );
-        dstring_free( output );
-        return -1;
-    }
-    #define push( arg ) do {\
-        if( !command_builder_push( &builder, arg)) {\
-            cb_error( "build: failed to push argument '%s'!", arg);\
-            command_builder_free( &builder );\
-            dstring_free( output );\
-            return -1;\
-        }\
-    } while(0)
-
-    push( "-std=c11" );
-    push( "-include" );
-    push( path_command_line );
-    push( "-xc" );
-    push( "impl/sources.h" );
-    if( build->is_static ) {
-        push( "-c" );
-        push( "-DMEDIA_ENABLE_STATIC_BUILD" );
-    } else {
-        push( "-shared" );
-        push( "-DMEDIA_ENABLE_EXPORT" );
-    }
-    push( "-o" );
-    push( output );
-    push( "-I.");
-    push( "-nostdlib" );
-    push( "-Wall" );
-    push( "-Wextra" );
-    push( "-Werror=vla" );
-    push( "-Werror" );
-
-    if( build->optimized ) {
-        push( "-O2" );
-    } else {
-        push( "-O0" );
-    }
-    if( build->strip_symbols ) {
-    } else {
-        push( "-g" );
-        push( "-gcodeview");
-        push( "-fuse-ld=lld" );
-    }
-    if( build->release ) {
-    } else {
-        if( !build->is_static ) {
-            push( "-Wl,/debug");
-        }
-    }
-
-    if( !build->is_static ) {
-        push( "-lkernel32" );
-    }
-
-    if( build->enable_logging ) {
-        push( "-DMEDIA_ENABLE_LOGGING" );
-    }
-    push( "-DMEDIA_LIB_VERSION_MAJOR=" macro_value_to_string(MEDIA_LIB_VERSION_MAJOR) );
-    push( "-DMEDIA_LIB_VERSION_MINOR=" macro_value_to_string(MEDIA_LIB_VERSION_MINOR) );
-    push( "-DMEDIA_LIB_VERSION_PATCH=" macro_value_to_string(MEDIA_LIB_VERSION_PATCH) );
-
-    Command cmd = command_builder_cmd( &builder );
-    dstring* flat = command_flatten_dstring( &cmd );
-    if( !flat ) {
-        cb_error( "build: failed to flatten command line!");
-        command_builder_free( &builder );
-        dstring_free( output );
-        return -1;
-    }
-
-    if( !build->dry ) {
-        if( string_cmp( build->output, string_text("build"))) {
-            if( !path_exists( "build" ) ) {
-                if( !dir_create("build") ) {
-                    cb_error( "build: failed to create build directory!");
-                    command_builder_free( &builder );
-                    dstring_free( output );
-                    dstring_free( flat );
-                    return -1;
-                }
-            }
-        }
-
-        if( !path_exists( "generated" ) ) {
-            if( !dir_create( "generated" ) ) {
-                cb_error( "build: failed to create generated directory!" );
-                command_builder_free( &builder );
-                dstring_free( output );
-                dstring_free( flat );
-                return -1;
-            }
-        }
-
-        FD fd_command_line;
-        FileOpenFlags fd_flags = FOPEN_WRITE;
-        if( path_exists( path_command_line ) ) {
-            fd_flags |= FOPEN_TRUNCATE;
-        } else {
-            fd_flags |= FOPEN_CREATE;
-        }
-        if( !fd_open(
-            path_command_line, fd_flags,
-            &fd_command_line
-        ) ) {
-            cb_error( "build: failed to create generated command line!" );
-            command_builder_free( &builder );
-            dstring_free( output );
-            dstring_free( flat );
-            return -1;
-        }
-        #define write( format, args... ) do {\
-            if( !fd_write_fmt( &fd_command_line, format, ##args ) ) {\
-                cb_error( "build: failed to generate command line!" );\
-                fd_close( &fd_command_line );\
-                command_builder_free( &builder );\
-                dstring_free( output );\
-                dstring_free( flat );\
-                return -1;\
-            }\
-        } while(0)
-
-        write( "// generated command line for media lib.\n" );
-        write( "const char external_media_library_command_line[] = \"%s\";\n", flat );
-        write( "unsigned int external_media_library_command_line_len = "
-              "sizeof(external_media_library_command_line) - 1;\n\n");
-
-        fd_close( &fd_command_line );
-        #undef write
-    }
-
-    int result = 0;
-    if( build->dry ) {
-        cb_info( "%s", flat );
-        dstring_free( flat );
-    } else {
-        dstring_free( flat );
-
-        PID pid = process_exec( cmd, false, 0, 0, 0, 0 );
-        result  = process_wait( pid );
-
-        if( result ) {
-            cb_error( "build: failed to compile project!" );
-        } else {
-            cb_info( "build: project compiled at path '%s'!", output );
-        }
-    }
-
-    command_builder_free( &builder );
-    dstring_free( output );
-    #undef push
-    return result;
-}
-int mode_test( int argc, char** argv, struct TestArguments* test ) {
-    // TODO(alicia): linux flags!
-
-    if( test->build.dry ) {
+    if( argc <= 1 ) {
+        mode_help( NULL );
         return 0;
     }
 
-    dstring* output = dstring_fmt(
-        "%.*s/libmedia.%s", test->build.output.len, test->build.output.cc,
-        test->build.is_static ? "o" : "dll" );
-    if( !output ) {
-        cb_error( "test: failed to create output path!" );
-        return -1;
+    ParsedArgs parsed_args;
+    memory_zero( &parsed_args, sizeof(parsed_args) );
+
+    String arg = string_from_cstr( argv[1] );
+    if( !mode_from_str( arg, &parsed_args.mode ) ) {
+        cb_error( "unrecognized mode '%s'", arg.cc );
+        mode_help( NULL );
+        return 1;
     }
 
-    cb_info( "test: compiling testing project . . .");
-    CommandBuilder builder;
-    if( !command_builder_new( "clang", &builder ) ) {
-        cb_error( "test: failed to create command builder!" );
-        dstring_free( output );
-        return -1;
-    }
-    #define push( arg ) do {\
-        if( !command_builder_push( &builder, arg ) ) {\
-            cb_error( "test: failed to push argument!");\
-            command_builder_free( &builder );\
-            if( output ) {\
-                dstring_free( output );\
-            }\
-            return -1;\
-        }\
-    } while(0)
+    if( parsed_args.mode == M_HELP && argc >= 2 ) {
+        arg = string_from_cstr( argv[2] );
+        mode_from_str( arg, &parsed_args.help.mode );
 
-    push( "-std=c11" );
-    push( "tests/test.c" );
-    if( test->build.is_static ) {
-        push( output );
-        push( "-lkernel32" );
-        push( "-DMEDIA_ENABLE_STATIC_BUILD" );
-    } else {
-        push("-L");
-        push( test->build.output.cc );
-        push( "-lmedia" );
-    }
-    push( "-o" );
-    push( "build/libmedia-test.exe" );
-    push( "-O0" );
-    push( "-g" );
-    push( "-gcodeview");
-    push( "-fuse-ld=lld");
-    push( "-Wl,/debug");
-    push( "-I.");
-
-    Command cmd = command_builder_cmd( &builder );
-    PID pid = process_exec( cmd, 0, 0, 0, 0, 0 );
-    int result = process_wait( pid );
-
-    dstring_free(output);
-    command_builder_free( &builder );
-
-    if( result ) {
-        cb_error( "test: failed to compile test project!");
-        return result;
-    }
-    cb_info( "test: test project compiled at path 'build/libmedia-test.exe'!" );
-
-    if( !command_builder_new( "build/libmedia-test.exe", &builder ) ) {
-        cb_error( "test: failed to create test command builder!");
-        return -1;
+        mode_help( &parsed_args );
+        return 0;
     }
 
-    if( test->passthrough_start ) {
-        for( int i = test->passthrough_start; i < argc; ++i ) {
-            push( argv[i] );
+    bool break_loop = false;
+    for( int i = 2; i < argc && !break_loop; ++i ) {
+        arg = string_from_cstr( argv[i] );
+
+        switch( parsed_args.mode ) {
+            case M_BUILD:
+            case M_TEST:
+            case M_DOCS:
+            case M_LSP: {
+                if( string_cmp( string_text("-t"), arg ) ) {
+                    i++;
+                    if( i >= argc ) {
+                        cb_error( "argument '-t' requires a target name after it!" );
+                        mode_help( &parsed_args );
+                        return 1;
+                    }
+                    arg = string_from_cstr( argv[i] );
+                    if( !target_from_str( arg, &parsed_args.build.target ) ) {
+                        cb_error( "unrecognized target '%s'", arg.cc );
+                        mode_help( &parsed_args );
+                        return 1;
+                    }
+                    continue;
+                }
+                if( string_cmp( string_text("-static"), arg ) ) {
+                    parsed_args.build.is_static = true;
+                    continue;
+                }
+            } break;
+
+            case M_HELP:
+            case M_COUNT: break;
+        }
+
+        switch( parsed_args.mode ) {
+            case M_BUILD:
+            case M_TEST: {
+                if( string_cmp( string_text("-o"), arg ) ) {
+                    i++;
+                    if( i >= argc ) {
+                        cb_error( "argument '-o' requires a directory after it!" );
+                        mode_help( &parsed_args );
+                        return 1;
+                    }
+                    parsed_args.build.output = argv[i];
+                    continue;
+                }
+                if( string_cmp( string_text("-release"), arg ) ) {
+                    parsed_args.build.release = true;
+                    continue;
+                }
+                if( string_cmp( string_text("-no-symbols"), arg ) ) {
+                    parsed_args.build.strip_symbols = true;
+                    continue;
+                }
+                if( string_cmp( string_text("-dry"), arg ) ) {
+                    parsed_args.build.dry = true;
+                    continue;
+                }
+            } break;
+
+            case M_DOCS:
+            case M_LSP:
+            case M_HELP:
+            case M_COUNT: break;
+        }
+
+        switch( parsed_args.mode ) {
+            case M_DOCS: {
+                if( string_cmp( string_text("-browser"), arg ) ) {
+                    parsed_args.docs.launch_browser = true;
+                    continue;
+                }
+            } break;
+
+            case M_TEST: {
+                if( string_cmp( string_text( "--" ), arg ) ) {
+                    parsed_args.test.start = i + 1;
+                    parsed_args.test.argc  = argc;
+                    parsed_args.test.argv  = argv;
+                    break_loop = true;
+                    continue;
+                }
+            } break;
+
+            case M_BUILD: {
+                if( string_cmp( string_text("-n"), arg ) ) {
+                    i++;
+                    if( i >= argc ) {
+                        cb_error( "argument '-n' requires a string after it!" );
+                        mode_help( &parsed_args );
+                        return 1;
+                    }
+                    parsed_args.build.name = argv[i];
+                    continue;
+                }
+            } break;
+
+            case M_HELP:
+            case M_LSP:
+            case M_COUNT:break;
+        }
+
+        cb_error( "unrecognized argument '%s'", arg.cc );
+        mode_help( &parsed_args );
+        return 1;
+    }
+
+    switch( parsed_args.mode ) {
+        case M_BUILD : return mode_build( &parsed_args.build, NULL );
+        case M_TEST  : return mode_test( &parsed_args.test );
+        case M_DOCS  : return mode_docs( &parsed_args.docs );
+        case M_LSP   : return mode_lsp( &parsed_args.lsp );
+
+        case M_HELP  :
+        case M_COUNT : unreachable(); break;
+    }
+}
+DString* path_join( const char* a, const char* b ) {
+    const char* path1 = a;
+    if( !path1 ) {
+        path1 = "";
+    }
+    const char* path2 = b;
+    if( !path2 ) {
+        path2 = "";
+    }
+    usize path1_len = strlen( path1 );
+    usize path2_len = strlen( path2 );
+
+    usize cap = path1_len + path2_len + 16;
+    DString* result = dstring_empty( cap );
+    expect( result, "failed to create path!");
+
+    dstring_append( result, string_new( path1_len, path1 ) );
+    if( !path1_len || path1[path1_len - 1] != '/' ) {
+        dstring_push( result, '/' );
+    }
+    return dstring_append( result, string_new( path2_len, path2 ) );
+}
+bool mode_build_generate_command_line( const char* cmd_line ) {
+    cb_info( "build: generating command line . . ." );
+    if( !path_exists( "./generated") ) {
+        if(!dir_create( "./generated")) {
+            cb_error( "build: failed to create ./generated dir!" );
+            return false;
         }
     }
 
-    cb_info( "test: running test project . . ." );
+    const char* path = "./generated/medialib_command_line.c";
+
+    FileOpenFlags flags = FOPEN_WRITE;
+    if( path_exists( path ) ) {
+        flags |= FOPEN_TRUNCATE;
+    } else {
+        flags |= FOPEN_CREATE;
+    }
+
+    FD fd;
+    if( !fd_open( path, flags, &fd ) ) {
+        cb_error( "build: failed to open %s!", path );
+        return false;
+    }
+
+    #define write( args... )\
+        fd_write_fmt( &fd, args )
+
+    write( "/* generated command line for media lib. */\n" );
+    write( "const char external_media_library_command_line[] =\"" );
+    write( "%s", cmd_line );
+    write( "\";\n" );
+
+    write( "unsigned int external_media_library_command_line_len " );
+    write( "= sizeof(external_media_library_command_line) - 1;\n");
+
+    fd_close( &fd );
+    cb_info( "build: generated command line at '%s'", path );
+    #undef write
+    return true;
+}
+int mode_build( struct BuildArgs* args, CommandBuilder* opt_out_builder ) {
+    f64 start = timer_milliseconds();
+
+    // NOTE(alicia): finalized output path is generated here.
+    args->output = path_join(
+        args->output ? args->output : "./build",
+        args->name ? args->name : "libmedia" );
+
+    args->output = dstring_append(
+        (DString*)args->output,
+        args->is_static ? string_text(STATIC_EXT) : string_text(SO_EXT) );
+
+    CommandBuilder builder;
+    expect(
+        command_builder_new( "clang", &builder ),
+        "failed to create command builder!" );
+
+    command_builder_append(
+        &builder, "-std=c11", "-include",
+        "generated/medialib_command_line.c",
+        "-xc", "impl/sources.h",
+        ARGS_WARN );
+
+    if( args->is_static ) {
+        command_builder_append( &builder, "-c", "-o", args->output );
+    } else {
+        command_builder_append( &builder, "-o", args->output );
+    }
+
+    if( args->release ) {
+        command_builder_append( &builder, ARGS_OPT );
+    } else {
+        command_builder_append( &builder, ARGS_NO_OPT, "-DMEDIA_ENABLE_LOGGING" );
+    }
+
+    if( args->strip_symbols ) {
+    } else {
+        if( args->is_static ) {
+            command_builder_append( &builder, ARGS_WITH_SYMBOLS_STATIC );
+        } else {
+            command_builder_append( &builder, ARGS_WITH_SYMBOLS );
+        }
+    }
+
+    if( args->is_static ) {
+        command_builder_append( &builder, "-DMEDIA_ENABLE_STATIC_BUILD" );
+    } else {
+        command_builder_append( &builder, "-DMEDIA_ENABLE_EXPORT", ARGS_LINK );
+        command_builder_append( &builder, ARGS_LD );
+    }
+
+    command_builder_append(
+        &builder,
+        "-I.",
+        "-DMEDIA_LIB_VERSION_MAJOR=" macro_value_to_string(MEDIA_LIB_VERSION_MAJOR),
+        "-DMEDIA_LIB_VERSION_MINOR=" macro_value_to_string(MEDIA_LIB_VERSION_MINOR),
+        "-DMEDIA_LIB_VERSION_PATCH=" macro_value_to_string(MEDIA_LIB_VERSION_PATCH) );
+
+    // TODO(alicia): use target flags.
+
+    Command cmd = command_builder_cmd( &builder );
+
+    DString* flat = command_flatten_dstring( &cmd );
+    if( args->dry ) {
+        cb_info( "build: %s", flat );
+        dstring_free( flat );
+
+        if( opt_out_builder ) {
+            *opt_out_builder = builder;
+        } else {
+            command_builder_free( &builder );
+        }
+        return 0;
+    }
+
+    if( !mode_build_generate_command_line( flat ) ) {
+        dstring_free( flat );
+        command_builder_free(&builder);
+        return 1;
+    }
+
+    dstring_free( flat );
+
+    if( !process_in_path( "clang" ) ) {
+        cb_error( "build: could not find clang in path!" );
+        command_builder_free( &builder );
+        return 1;
+    }
+
+    PID pid = process_exec( cmd, false, NULL, NULL, NULL, NULL );
+    int res = process_wait( pid );
+
+    f64 end = timer_milliseconds();
+    cb_info( "build: compilation took %.2fms", end - start );
+
+    if( opt_out_builder ) {
+        *opt_out_builder = builder;
+    } else {
+        command_builder_free( &builder );
+    }
+
+    return res;
+}
+int mode_test( struct TestArgs* args ) {
+    CommandBuilder builder;
+    memory_zero( &builder, sizeof(builder) );
+
+    args->build.name = "libmedia-test";
+
+    int res = mode_build( &args->build, &builder );
+    if( res ) {
+        command_builder_free( &builder );
+        return res;
+    }
+
+    DString* flat = NULL;
+
+    command_builder_clear( &builder );
+    command_builder_push( &builder, "clang" );
+
+    command_builder_append( &builder, "-std=c11", "./tests/test.c", "-I.", ARGS_WARN );
+
+    if( args->build.is_static ) {
+        command_builder_append(
+            &builder, "./build/libmedia-test" STATIC_EXT,
+            "-DMEDIA_ENABLE_STATIC_BUILD" );
+    } else {
+        command_builder_append( &builder, "-L./build", "-lmedia-test" );
+    }
+
+    if( args->build.release ) {
+        command_builder_append( &builder, ARGS_OPT );
+    } else {
+        command_builder_append( &builder, ARGS_NO_OPT, "-DMEDIA_ENABLE_LOGGING" );
+    }
+
+    if( args->build.strip_symbols ) {
+    } else {
+        if( args->build.is_static ) {
+            command_builder_append( &builder, ARGS_WITH_SYMBOLS_STATIC );
+        } else {
+            command_builder_append( &builder, ARGS_WITH_SYMBOLS );
+        }
+    }
+
+    if( args->build.is_static ) {
+        command_builder_append( &builder, ARGS_LINK );
+    } else {
+    }
+
+#if !defined(PLATFORM_WINDOWS)
+    command_builder_append( &builder, "-lm" );
+#endif
+
+    Command cmd = command_builder_cmd( &builder );
+    if( args->build.dry ) {
+        flat = command_flatten_dstring( &cmd );
+        cb_info( "test: %s", flat );
+        dstring_free( flat );
+    } else {
+        PID pid = process_exec( cmd, false, NULL, NULL, NULL, NULL );
+        res = process_wait( pid );
+        if( res ) {
+            cb_error( "test: failed to compile test program!" );
+            command_builder_free( &builder );
+            return res;
+        }
+    }
+
+    command_builder_clear( &builder );
+    command_builder_push( &builder, TEST_PATH );
+
+    if( args->argv ) {
+        command_builder_append_list(
+            &builder, (usize)(args->argc - args->start), args->argv + args->start );
+    }
+
     cmd = command_builder_cmd( &builder );
-    pid = process_exec( cmd, false, 0, 0, 0, 0 );
-    result = process_wait( pid );
+    if( args->build.dry ) {
+        flat = command_flatten_dstring( &cmd );
+        cb_info( "test: %s", flat );
+        dstring_free( flat );
+        return 0;
+    }
 
-    cb_info( "test: test project exited with code %i.", result );
+    PID pid = process_exec( cmd, false, NULL, NULL, NULL, NULL );
+    res = process_wait( pid );
 
-    #undef push
+    cb_info( "test: exited with code %i", res );
+
     return 0;
 }
-int mode_docs( struct DocsArguments* docs ) {
+int mode_docs( struct DocsArgs* args ) {
     if( !process_in_path( "doxygen" ) ) {
-        cb_error( "docs: doxygen is required to build documentation!" );
-        return -1;
+        cb_error(
+            "docs: doxygen was not found in path! "
+            "cannot generate docs without doxygen!" );
+        return 1;
     }
-    cb_info( "docs: generating doxygen settings for build configuration . . ." );
 
-    dstring* settings = dstring_empty( kibibytes(4) );
-    if( !settings ) {
-        cb_error( "docs: failed to allocate doxygen settings buffer!");
-        return -1;
-    }
-    #define write( format, args... ) do {\
-        const char* formatted = local_fmt( format, ##args );\
-        dstring* _new = dstring_append_cstr( settings, formatted );\
-        if( !_new ) {\
-            cb_error( "docs: failed to reallocate settings buffer!");\
-            return -1;\
-        }\
+    cb_info( "docs: generating doxygen settings for current platform . . ." );
+
+    DString* local_settings = dstring_empty( kibibytes(4) );
+    expect( local_settings, "docs: failed to allocate doxygen settings!" );
+
+    #define write( args... ) do {\
+        const char* string = local_fmt( args );\
+        dstring_append_cstr( local_settings, string );\
     } while(0)
 
-    write( "PREDEFINED += ");
-    write( "MEDIA_LIB_VERSION_MAJOR=%i ", MEDIA_LIB_VERSION_MAJOR );
-    write( "MEDIA_LIB_VERSION_MINOR=%i ", MEDIA_LIB_VERSION_MINOR );
-    write( "MEDIA_LIB_VERSION_PATCH=%i ", MEDIA_LIB_VERSION_PATCH );
-    if( docs->build.release ) {
-    }
-    if( docs->build.is_static ) {
+    write( "PREDEFINED += " );
+    write( "MEDIA_LIB_VERSION_MAJOR=" macro_value_to_string(MEDIA_LIB_VERSION_MAJOR) " " );
+    write( "MEDIA_LIB_VERSION_MINOR=" macro_value_to_string(MEDIA_LIB_VERSION_MINOR) " " );
+    write( "MEDIA_LIB_VERSION_PATCH=" macro_value_to_string(MEDIA_LIB_VERSION_PATCH) " " );
+
+    if( args->build.is_static ) {
         write( "MEDIA_ENABLE_STATIC_BUILD " );
     }
-    if( docs->build.enable_logging ) {
-        write( "MEDIA_ENABLE_LOGGING " );
-    }
-    write( "__clang__ " );
-    switch( docs->build.target ) {
+    write( "MEDIA_ENABLE_LOGGING __clang__ " );
+
+    switch( args->build.target ) {
         case T_NATIVE: {
-#if defined(PLATFORM_WINDOWS)
-            write( "_WIN32 ");
-#elif defined(PLATFORM_LINUX)
-            write( "__linux__ " );
-#elif defined(PLATFORM_MACOS)
-            write( "__APPLE__ TARGET_OS_MAC " );
-#endif
-#if defined( ARCH_64BIT )
-    #if defined(PLATFORM_MINGW)
+            switch( platform_current() ) {
+                case P_WINDOWS: {
+                    write( "_WIN32 " );
+                } break;
+                case P_LINUX: {
+                    write( "__linux__ " );
+                } break;
+                case P_MACOS: {
+                    write( "__APPLE__ TARGET_OS_MAC " );
+                } break;
+                case P_UNKNOWN: break;
+            }
+#if defined(ARCH_64BIT)
+
+    #if defined(PLATFORM_WINDOWS) && defined(PLATFORM_MINGW)
             write( "__MINGW64__ " );
-    #endif
-#else
-    #if defined(PLATFORM_MINGW)
-            write( "__MINGW32__ " );
-    #endif
-#endif
-#if defined(ARCH_X86)
-    #if defined(ARCH_64BIT)
+    #endif /* Mingw64 */
+
+    #if defined(ARCH_X86)
             write( "__x86_64__ " );
-    #else
-            write( "__i386__ " );
-    #endif
-#elif defined(ARCH_ARM)
-    #if defined(ARCH_64BIT)
+    #elif defined(ARCH_ARM)
             write( "__aarch64__ " );
-    #else
+    #endif
+
+#else /* Arch 64-bit */
+
+    #if defined(PLATFORM_WINDOWS) && defined(PLATFORM_MINGW)
+            write( "__MINGW32__ " );
+    #endif /* Mingw32 */
+
+    #if defined(ARCH_X86)
+            write( "__i386__ " );
+    #elif defined(ARCH_ARM)
             write( "__arm__ " );
     #endif
-#endif
+
+#endif /* Arch 32-bit */
         } break;
+
+        case T_COUNT: break;
     }
 
-    write( "\nPROJECT_NUMBER = %i.%i.%i",
+    write( 
+        "\nPROJECT_NUMBER = %i.%i.%i",
         MEDIA_LIB_VERSION_MAJOR, MEDIA_LIB_VERSION_MINOR, MEDIA_LIB_VERSION_PATCH );
 
-    const char* settings_path = "docs/Doxyfile_generated";
+    const char* settings_path = "./docs/Doxyfile_generated";
     if( path_exists( settings_path ) ) {
-        file_remove( settings_path );
+        expect(
+            file_remove( settings_path ),
+            "docs: failed to remove previous generated doxygen settings!" );
     }
 
-    if( !file_copy( settings_path, "docs/Doxyfile_default")) {
-        cb_error( "docs: failed to copy default doxygen settings!");
-        dstring_free( settings );
-        return -1;
-    }
+    expect(
+        file_copy( settings_path, "./docs/Doxyfile_default" ),
+        "docs: failed to copy default doxygen settings!" );
 
-    FD fd_settings;
-    if( !fd_open( settings_path, FOPEN_WRITE, &fd_settings ) ) {
-        cb_error( "docs: failed to open settings file!" );
-        dstring_free( settings );
-        return -1;
-    }
-    fd_seek( &fd_settings, FSEEK_END, 0 );
-    b32 write_success = fd_write( &fd_settings, dstring_len(settings), settings, 0 );
-    fd_close( &fd_settings );
-    dstring_free( settings );
+    FD fd;
+    expect(
+        fd_open( settings_path, FOPEN_WRITE, &fd ),
+        "docs: failed to open doxygen settings!");
 
-    if( !write_success ) {
-        cb_error( "docs: failed to write to settings!");
-        return -1;
-    }
-    cb_info( "docs: generated doxygen settings at '%s'!", settings_path );
+    fd_seek( &fd, FSEEK_END, 0 );
+    bool success = fd_write(
+        &fd, dstring_len( local_settings ), local_settings, NULL );
+    fd_close( &fd );
+    dstring_free( local_settings );
+
+    expect( success, "docs: failed to write to generated doxygen settings!" );
+
+    cb_info( "docs: generated doxygen settings at path '%s'!", settings_path );
 
     Command cmd = command_new( "doxygen", "Doxyfile_generated", "-q" );
-    // TODO(alicia): add dir_change to cbuild to avoid this
+
+    cb_info( "docs: generating documentation . . ." );
+
     chdir( "docs" );
-    PID pid = process_exec( cmd, false, 0, 0, 0, 0 );
+    PID pid = process_exec( cmd, false, NULL, NULL, NULL, NULL );
     chdir( ".." );
 
-    cb_info( "docs: generating documentation with doxygen . . ." );
-    int result = process_wait( pid );
-    cb_info( "docs: doxygen exited with code %i.", result );
-    if( result ) {
-        return result;
+    int res = process_wait( pid );
+    if( res ) {
+        cb_error( "docs: doxygen exited with code %i", res );
+        return res;
     }
 
-    cb_info( "docs: documentation generated at 'docs/html/index.html'");
+    const char* docpath = "./docs/html/index.html";
+    cb_info( "docs: documentation generated at '%s'", docpath );
 
-    if( docs->launch_browser ) {
-        cb_info("docs: attempting to launch browser . . ." );
-        b32 process_found = false;
+    if( args->launch_browser ) {
+        cb_info( "docs: searching for browser to open docs . . ." );
+        bool process_found = false;
         Command browser_cmd;
-#if defined( PLATFORM_WINDOWS )
-        if( process_in_path( "pwsh" ) ) {
-            browser_cmd = command_new(
-                "pwsh", "-Command", "Invoke-Expression", "docs/html/index.html" );
+#if defined(PLATFORM_WINDOWS)
+        if( process_in_path("pwsh")) {
+            browser_cmd = command_new( "pwsh", "-Command", "Invoke-Expression", docpath );
             process_found = true;
+            cb_info( "docs: using shell to launch browser" );
         }
 #endif
         if( !process_found ) {
             if( process_in_path( "firefox" ) ) {
-                browser_cmd = command_new( "firefox", "docs/html/index.html" );
+                browser_cmd   = command_new( "firefox", "./docs/html/index.html" );
                 process_found = true;
-            } else if( process_in_path("chromium")) {
-                browser_cmd = command_new( "chromium", "docs/html/index.html" );
+                cb_info( "docs: using firefox to open docs" );
+            } else if( process_in_path( "chromium" ) ) {
+                browser_cmd   = command_new( "chromium", "./docs/html/index.html" );
                 process_found = true;
-            } else if( process_in_path("google-chrome")) {
-                browser_cmd = command_new( "google-chrome", "docs/html/index.html" );
+                cb_info( "docs: using chromium to open docs" );
+            } else if( process_in_path( "google-chrome" ) ) {
+                browser_cmd   = command_new( "google-chrome", "./docs/html/index.html" );
                 process_found = true;
+                cb_info( "docs: using google-chrome to open docs" );
             }
         }
 
         if( !process_found ) {
-            cb_warn(
-                "docs: attempted to launch browser "
-                "but no recognized browser was found!");
+            cb_warn( "docs: no browser found!" );
             return 0;
         }
 
-        pid = process_exec( browser_cmd, true, 0, 0, 0, 0 );
+        pid = process_exec( browser_cmd, true, NULL, NULL, NULL, NULL );
         process_discard( pid );
-
-        cb_info( "docs: launched documentation in browser." );
     }
 
     #undef write
     return 0;
 }
-int mode_lsp( struct LspArguments* lsp ) {
-    dstring* _template = dstring_empty( kibibytes(1) );
-    if( !_template ) {
-        cb_error( "lsp: failed to allocate buffer!");
-        return -1;
-    }
-    #define push( format, args... ) do {\
-        const char* formatted = local_fmt( format, ##args );\
-        dstring* _new = dstring_append_cstr( _template, formatted );\
-        if( !_new ) {\
-            cb_error( "lsp: failed to reallocate buffer!");\
-            return -1;\
-        }\
-    } while(0)
+int mode_lsp( struct LspArgs* args ) {
+    DString* temp = dstring_empty( kibibytes(1) );
+    expect( temp, "lsp: failed to allocate buffer!" );
 
-    cb_info( "lsp: generating flags . . .");
+    #define push( str ) dstring_append_cstr( temp, str "\n" )
 
-    push( "clang\n" );
-    push( "-std=c11\n" );
-    push( "-I..\n" );
-    push( "-Wall\n" );
-    push( "-Wextra\n" );
-    push( "-D_CLANGD\n" );
-    push( "-DMEDIA_LIB_VERSION_MAJOR=" macro_value_to_string(MEDIA_LIB_VERSION_MAJOR) "\n" );
-    push( "-DMEDIA_LIB_VERSION_MINOR=" macro_value_to_string(MEDIA_LIB_VERSION_MINOR) "\n" );
-    push( "-DMEDIA_LIB_VERSION_PATCH=" macro_value_to_string(MEDIA_LIB_VERSION_PATCH) "\n" );
+    push( "clang" );
+    push( "-std=c11" );
+    push( "-I.." );
+    push( "-Wall\n-Wextra" );
+    push( "-D_CLANGD" );
+    push( "-DMEDIA_LIB_VERSION_MAJOR=" macro_value_to_string(MEDIA_LIB_VERSION_MAJOR) );
+    push( "-DMEDIA_LIB_VERSION_MINOR=" macro_value_to_string(MEDIA_LIB_VERSION_MINOR) );
+    push( "-DMEDIA_LIB_VERSION_PATCH=" macro_value_to_string(MEDIA_LIB_VERSION_PATCH) );
+    push( "-DMEDIA_ENABLE_LOGGING" );
 
-    if( lsp->build.enable_logging ) {
-        push( "-DMEDIA_ENABLE_LOGGING\n" );
-    }
+    usize len = dstring_len( temp );
 
-    usize generic_flags_len = dstring_len( _template );
+    cb_info( "lsp: generating ./media/ compile flags . . ." );
 
-    cb_info( "lsp: generic compile flags generated." );
-
-    cb_info( "lsp: writing ./media compile flags . . ." );
-
-    if( lsp->build.is_static ) {
-        push( "-DMEDIA_ENABLE_STATIC_BUILD\n");
+    if( args->build.is_static ) {
+        push( "-DMEDIA_ENABLE_STATIC_BUILD" );
     } else {
-        push( "-DMEDIA_ENABLE_EXPORT\n" );
+        push( "-DMEDIA_ENABLE_EXPORT" );
     }
-    cb_info( "lsp: media compile flags generated.");
 
     FD fd;
     FileOpenFlags flags = FOPEN_WRITE;
-    if( path_exists( "media/compile_flags.txt") ) {
+
+    const char* path = "./media/compile_flags.txt";
+    if( path_exists( path ) ) {
         flags |= FOPEN_TRUNCATE;
     } else {
         flags |= FOPEN_CREATE;
     }
 
-    if( fd_open( "media/compile_flags.txt", flags, &fd ) ) {
-        fd_write( &fd, dstring_len(_template), _template, 0 );
-        fd_close( &fd );
-    } else {
-        cb_warn( "lsp: failed to open ./media compile flags!" );
-    }
+    expect(
+        fd_open( path, flags, &fd ),
+        "lsp: failed to open %s!", path );
 
-    cb_info( "lsp: writing ./tests compile flags . . ." );
+    fd_write( &fd, dstring_len(temp), temp, 0 );
+    fd_close( &fd );
 
-    dstring_truncate( _template, generic_flags_len );
-    if( lsp->build.is_static ) {
-        push( "-DMEDIA_ENABLE_STATIC_BUILD\n");
+    cb_info( "lsp: \tgenerated %s compile flags", path );
+    dstring_truncate( temp, len );
+
+    cb_info( "lsp: generating ./tests/ compile flags . . ." );
+
+    if( args->build.is_static ) {
+        push( "-DMEDIA_ENABLE_STATIC_BUILD" );
     }
-    cb_info( "lsp: tests compile flags generated." );
 
     flags = FOPEN_WRITE;
-    if( path_exists( "tests/compile_flags.txt") ) {
+
+    path = "./tests/compile_flags.txt";
+    if( path_exists( path ) ) {
         flags |= FOPEN_TRUNCATE;
     } else {
         flags |= FOPEN_CREATE;
     }
 
-    if( fd_open( "tests/compile_flags.txt", flags, &fd ) ) {
-        fd_write( &fd, dstring_len(_template), _template, 0 );
-        fd_close( &fd );
-    } else {
-        cb_warn( "lsp: failed to open ./tests compile flags!" );
-    }
+    expect(
+        fd_open( path, flags, &fd ),
+        "lsp: failed to open %s!", path );
 
-    cb_info( "lsp: writing ./impl compile flags . . ." );
+    fd_write( &fd, dstring_len(temp), temp, 0 );
+    fd_close( &fd );
 
-    dstring_truncate( _template, generic_flags_len );
-    if( lsp->build.is_static ) {
-        push( "-DMEDIA_ENABLE_STATIC_BUILD\n");
+    cb_info( "lsp: \tgenerated %s compile flags", path );
+    dstring_truncate( temp, len );
+
+    cb_info( "lsp: generating ./impl/ compile flags . . ." );
+
+    if( args->build.is_static ) {
+        push( "-DMEDIA_ENABLE_STATIC_BUILD" );
     } else {
-        push( "-DMEDIA_ENABLE_EXPORT\n");
+        push( "-DMEDIA_ENABLE_EXPORT" );
     }
-    cb_info( "lsp: impl compile flags generated.");
 
     flags = FOPEN_WRITE;
-    if( path_exists( "impl/compile_flags.txt") ) {
+
+    path = "./impl/compile_flags.txt";
+    if( path_exists( path ) ) {
         flags |= FOPEN_TRUNCATE;
     } else {
         flags |= FOPEN_CREATE;
     }
 
-    if( fd_open( "impl/compile_flags.txt", flags, &fd ) ) {
-        fd_write( &fd, dstring_len(_template), _template, 0 );
-        fd_close( &fd );
-    } else {
-        cb_warn( "lsp: failed to open ./impl compile flags!" );
-    }
+    expect(
+        fd_open( path, flags, &fd ),
+        "lsp: failed to open %s!", path );
 
-    dstring_free( _template );
+    fd_write( &fd, dstring_len(temp), temp, 0 );
+    fd_close( &fd );
+
+    cb_info( "lsp: \tgenerated %s compile flags", path );
+    dstring_truncate( temp, len );
+
     #undef push
     return 0;
 }
-
-b32 parse_arguments( int argc, char** argv, struct Arguments* out_args ) {
-    if( argc <= 1 ) {
-        return true;
-    }
-
-    if( !mode_parse( string_from_cstr( argv[1] ), &out_args->mode ) ) {
-        cb_error( "failed to parse mode '%s'!", argv[1] );
-        mode_help( M_HELP );
-        return false;
-    }
-
-    switch( out_args->mode ) {
-        case M_BUILD:
-        case M_DOCS:
-        case M_TEST:
-        case M_LSP: {
-            out_args->build.output = string_text( "build" );
-        } break;
-        case M_HELP:
-        case M_COUNT:
-          break;
-    }
-
-    for( int i = 2; i < argc; ++i ) {
-        string arg = string_from_cstr( argv[i] );
-        switch( out_args->mode ) {
-            case M_HELP: {
-                if( mode_parse( arg, &out_args->help.mode ) ) {
-                    return true;
-                }
-            } break;
-            case M_BUILD: case M_DOCS: case M_TEST:
-            case M_LSP: {
-                // NOTE(alicia): parse generic flags
-
-                string part = string_adv_by( arg, 2 );
-                if( part.len ) {
-                    if( string_cmp( part, string_text("release"))) {
-                        out_args->build.release = true;
-                        continue;
-                    } else if( string_cmp( part, string_text("optimized"))) {
-                        out_args->build.optimized = true;
-                        continue;
-                    } else if( string_cmp( part, string_text( "static" ))) {
-                        out_args->build.is_static = true;
-                        continue;
-                    } else if( string_cmp( part, string_text("enable-logging"))) {
-                        out_args->build.enable_logging = true;
-                        continue;
-                    }
-                }
-            } break;
-            case M_COUNT: break;
-        }
-        switch( out_args->mode ) {
-            case M_TEST:
-            case M_BUILD: {
-                if( string_cmp( arg, string_text("--dry"))) {
-                    out_args->build.dry = true;
-                    continue;
-                } else if( string_cmp( string_truncate( arg, sizeof("--output") ), string_text("--output="))) {
-                    string dir = string_adv_by( arg, sizeof("--output"));
-                    if( string_is_empty( dir ) ) {
-                        cb_error( "--output requires a path!" );
-                        mode_help( out_args->mode );
-                        return false;
-                    }
-
-                    out_args->build.output = dir;
-                    continue;
-                } else if( string_cmp( string_truncate( arg, sizeof("--target")), string_text("--target="))) {
-                    string target = string_adv_by( arg, sizeof("--target"));
-                    if( !target_parse( target, &out_args->build.target )) {
-                        cb_error(
-                            "--target requires valid target! '%.*s'",
-                            target.len, target.cc );
-                        return false;
-                    }
-
-                    continue;
-                } else if( string_cmp( arg, string_text("--strip-symbols"))) {
-                    out_args->build.strip_symbols = true;
-                    continue;
-                }
-            } break;
-            case M_DOCS: {
-                if( string_cmp( arg, string_text( "--browser" ))) {
-                    out_args->docs.launch_browser = true;
-                    continue;
-                }
-            } break;
-            case M_LSP: case M_HELP: case M_COUNT:
-                break;
-        }
-        switch( out_args->mode ) {
-            case M_TEST: {
-                if( string_cmp( arg, string_text("--"))) {
-                    out_args->test.passthrough_start = i + 1;
-                    goto parse_arguments_end;
-                }
-            } break;
-            case M_BUILD: case M_HELP: case M_DOCS: case M_LSP: case M_COUNT:
-                break;
-        }
-
-        cb_error( "unrecognized argument '%s'", arg.cc );
-        mode_help( out_args->mode );
-        return false;
-    }
-
-parse_arguments_end:
-    return true;
-}
-
-void mode_help( enum Mode mode ) {
-    println( "OVERVIEW:    Media library build system." );
-    println( "USAGE:       cbuild %s [args]", mode == M_HELP ? "<mode>" : mode_to_string(mode, 0));
-    printf(  "DESCRIPTION: ");
-
+int mode_help( ParsedArgs* args ) {
+    Mode mode = args ? (args->mode == M_HELP ? args->help.mode : args->mode) : M_HELP;
+    printf( "OVERVIEW:    Build system for media lib.\n");
+    printf( "USAGE:       ./cbuild %s [args]\n", mode == M_HELP ? "<mode>" : mode_to_str(mode).cc );
+    printf( "DESCRIPTION:\n");
+    printf( "  %s\n", mode_description( mode ).cc );
+    printf( "ARGUMENTS:\n");
     switch( mode ) {
         case M_HELP: {
-            println( "Print this help message or if a mode is provided, print help for that mode. ex: cbuild help build" );
-        } break;
-        case M_BUILD: {
-            println( "Build project. Compiled with clang (mingw on windows)." );
-        } break;
-        case M_DOCS: {
-            println( "Create documentation. Doxygen is required.");
-        } break;
-        case M_TEST: {
-            println( "Build project and run tests with it.");
-        } break;
-        case M_LSP: {
-            println( "Generate clangd compile_flags.txt for build configuration.");
-        } break;
-        case M_COUNT: break;
-    }
-
-    if( mode == M_HELP ) {
-        println( "MODES:" );
-    } else {
-        println( "ARGUMENTS:");
-    }
-
-    switch( mode ) {
-        case M_TEST:
-        case M_BUILD: {
-            println( "  --output=<dir-path> set output directory. directory must already exist. (default=build)");
-            println( "  --target=<platform> build for given platform. (default=native)" );
-            println( "                        valid: native");
-            println( "  --strip-symbols     don't generate debug symbols. (default=false)");
-        } break;
-        case M_HELP: case M_DOCS: case M_LSP: case M_COUNT:
-          break;
-    }
-    switch( mode ) {
-        case M_HELP: {
-            println( "  <mode,optional>  name of mode to print help for.");
-            printf ( "                      valid: " );
-            for( enum Mode m = M_HELP; m < M_COUNT; ++m ) {
-                printf( "%s", mode_to_string(m, 0) );
-                if( m + 1 != M_COUNT ) {
+            printf( "  <mode>       Mode to run cbuild in.\n");
+            printf( "                 valid: " );
+            for( Mode mode_i = 0; mode_i < M_COUNT; ++mode_i ) {
+                printf( "%s", mode_to_str(mode_i).cc );
+                if( mode_i + 1 < M_COUNT ) {
                     printf( ", " );
+                } else {
+                    printf( "\n" );
                 }
             }
-            printf( "\n" );
+            printf( "  help <mode>  Print help for mode and exit.\n");
+            printf( "                 valid: " );
+            for( Mode mode_i = 0; mode_i < M_COUNT; ++mode_i ) {
+                printf( "%s", mode_to_str(mode_i).cc );
+                if( mode_i + 1 < M_COUNT ) {
+                    printf( ", " );
+                } else {
+                    printf( "\n" );
+                }
+            }
         } break;
-        case M_TEST: 
-        case M_DOCS: 
-        case M_LSP: 
         case M_BUILD: {
-            println( "  --release           build in release mode. (default=false)");
-            println( "  --optimized         build with optimizations on. (default=false)");
-            println( "  --static            build object file instead of dll/so. (default=false)");
-            println( "  --enable-logging    enable library logging. (default=false)");
+            printf( "  -n <string>  Override library name. (default = libmedia)\n");
+            printf( "  -o <path>    Set output directory. (default = ./build)\n");
+            printf( "                 NOTE: cbuild only creates output dir when this flag is unused.\n" );
+            printf( "  -t <target>  Set target. (default = native)\n");
+            printf( "                 valid: " );
+            for( Target target_i = 0; target_i < T_COUNT; ++target_i ) {
+                printf( "%s", target_to_str(target_i).cc );
+                if( target_i + 1 < T_COUNT ) {
+                    printf( ", " );
+                } else {
+                    printf( "\n" );
+                }
+            }
+            printf( "  -release     Build in release mode. (default = false)\n");
+            printf( "                 Enables optimizations and disables logging.\n");
+            printf( "  -no-symbols  Strips debug symbols from build. (default = false)\n" );
+            printf( "  -static      Build static library instead of dynamic. (default = false)\n");
+            printf( "                 Prints required link flags for current target after compilation completes.\n");
+            printf( "  -dry         Don't actually build, just print configuration.\n" );
         } break;
-        case M_COUNT:
-          break;
-    }
-    switch( mode ) {
+        case M_TEST: {
+            printf( "  -o <path>    Set output directory. (default = ./build)\n");
+            printf( "                 NOTE: cbuild only creates output dir when this flag is unused.\n" );
+            printf( "  -t <target>  Set target. (default = native)\n");
+            printf( "                 valid: " );
+            for( Target target_i = 0; target_i < T_COUNT; ++target_i ) {
+                printf( "%s", target_to_str(target_i).cc );
+                if( target_i + 1 < T_COUNT ) {
+                    printf( ", " );
+                } else {
+                    printf( "\n" );
+                }
+            }
+            printf( "  -release     Build in release mode. (default = false)\n");
+            printf( "                 Enables optimizations and disables logging.\n");
+            printf( "  -no-symbols  Strips debug symbols from build. (default = false)\n" );
+            printf( "  -static      Build static library instead of dynamic. (default = false)\n");
+            printf( "                 Prints required link flags for current target after compilation completes.\n");
+            printf( "  -dry         Don't actually build, just print configuration.\n" );
+            printf( "  --           Stop parsing cbuild arguments and pass remaining arguments to test program.\n" );
+        } break;
         case M_DOCS: {
-            println( "  --browser           attempt to launch browser with documentation. (chrome, chromium and firefox only)");
+            printf( "  -t <target>  Set target. (default = native)\n");
+            printf( "                 valid: " );
+            for( Target target_i = 0; target_i < T_COUNT; ++target_i ) {
+                printf( "%s", target_to_str(target_i).cc );
+                if( target_i + 1 < T_COUNT ) {
+                    printf( ", " );
+                } else {
+                    printf( "\n" );
+                }
+            }
+            printf( "  -static      Set static flags. (default = false)\n");
+            printf( "  -browser     Open docs after generating.\n" );
+            printf( "                 Checks for firefox, chromium and google-chrome, in that order.\n");
         } break;
         case M_LSP: {
+            printf( "  -t <target>  Set target. (default = native)\n");
+            printf( "                 valid: " );
+            for( Target target_i = 0; target_i < T_COUNT; ++target_i ) {
+                printf( "%s", target_to_str(target_i).cc );
+                if( target_i + 1 < T_COUNT ) {
+                    printf( ", " );
+                } else {
+                    printf( "\n" );
+                }
+            }
+            printf( "  -static      Set static flags in compile_flags.txt (default = false)\n");
         } break;
-
-        case M_TEST: {
-            println( "  --                  stop parsing arguments and pass remaining arguments to test executable.");
-        }
-        case M_BUILD: {
-            println( "  --dry               don't actually build, just output command line arguments.");
-        } break;
-        case M_HELP:
         case M_COUNT: break;
     }
+    return 0;
 }
-const char* target_to_string( enum Target target, usize* opt_out_len ) {
-    #define result( str ) do {\
-        if( opt_out_len ) {\
-            *opt_out_len = sizeof(str) - 1;\
-        }\
-        return str;\
-    } while(0)
-
-    switch( target ) {
-        case T_NATIVE: result( "native" );
-    }
-    panic( "invalid mode provided!" );
-
-    #undef result
-}
-b32 target_parse( string str, enum Target* out_target ) {
-    if( string_cmp( str, string_text("native"))) {
-        *out_target = T_NATIVE;
-        return true;
-    }
-
-    enum Target warning_if_not_implemented = 0;
-    switch( warning_if_not_implemented ) {
-        case T_NATIVE:
-          break;
-    }
-    return false;
-}
-const char* mode_to_string( enum Mode mode, usize* opt_out_len ) {
-    #define result( str ) do {\
-        if( opt_out_len ) {\
-            *opt_out_len = sizeof(str) - 1;\
-        }\
-        return str;\
-    } while(0)
-
+String mode_to_str( Mode mode ) {
     switch( mode ) {
-        case M_HELP:  result("help");
-        case M_BUILD: result("build");
-        case M_DOCS:  result("docs");
-        case M_TEST:  result("test");
-        case M_LSP:   result("lsp");
-
+        case M_HELP:  return string_text("help");
+        case M_BUILD: return string_text("build");
+        case M_TEST:  return string_text("test");
+        case M_DOCS:  return string_text("docs");
+        case M_LSP:   return string_text("lsp");
         case M_COUNT: break;
     }
-    panic( "invalid mode provided!" );
-
-#undef result
+    unreachable();
 }
-b32 mode_parse( string str, enum Mode* out_mode ) {
-    if( string_cmp( str, string_text("help"))) {
-        *out_mode = M_HELP;
-        return true;
+bool mode_from_str( String str, Mode* out_mode ) {
+    for( Mode mode = 0; mode < M_COUNT; ++mode ) {
+        if( string_cmp( str, mode_to_str(mode))) {
+            *out_mode = mode;
+            return true;
+        }
     }
-    if( string_cmp( str, string_text("build"))) {
-        *out_mode = M_BUILD;
-        return true;
-    }
-    if( string_cmp( str, string_text("docs"))) {
-        *out_mode = M_DOCS;
-        return true;
-    }
-    if( string_cmp( str, string_text("test"))) {
-        *out_mode = M_TEST;
-        return true;
-    }
-    if( string_cmp( str, string_text("lsp"))) {
-        *out_mode = M_LSP;
-        return true;
-    }
-
-    enum Mode warning_if_not_implemented = 0;
-    switch( warning_if_not_implemented ) {
-        case M_HELP:
-        case M_BUILD:
-        case M_DOCS:
-        case M_TEST:
-        case M_LSP:
-        case M_COUNT:
-          break;
-    }
-
     return false;
 }
-
-void print_arguments( const struct Arguments* args ) {
-    cb_info( "mode: %s", mode_to_string( args->mode, 0 ));
-    switch( args->mode ) {
-        case M_HELP: {
-            cb_info( "  help mode: %s", mode_to_string( args->help.mode, 0 ) );
-        } break;
-        case M_DOCS:
-        case M_TEST:
-        case M_LSP:
-        case M_BUILD: {
-            switch( args->mode ) {
-                case M_TEST:
-                case M_BUILD: {
-                    cb_info( "  output:         '%.*s'", args->build.output.len, args->build.output.cc );
-                    cb_info( "  target:         %s", target_to_string( args->build.target, 0 ) );
-                    cb_info( "  dry:            %s", args->build.dry ? "true" : "false" );
-                } break;
-                case M_DOCS: {
-                    cb_info( "  launch browser: %s", args->docs.launch_browser ? "true" : "false" );
-                } break;
-                case M_HELP: case M_LSP: case M_COUNT:
-                    break;
-            }
-            cb_info( "  release:        %s", args->build.release ? "true" : "false" );
-            cb_info( "  optimized:      %s", args->build.optimized ? "true" : "false" );
-            cb_info( "  static:         %s", args->build.is_static ? "true" : "false" );
-            cb_info( "  enable logging: %s", args->build.enable_logging ? "true" : "false" );
-            if( args->mode == M_TEST ) {
-                cb_info( "  passthrough:    %s", args->test.passthrough_start ? "true" : "false");
-            }
-        } break;
+String mode_description( Mode mode ) {
+    switch( mode ) {
+        case M_HELP:  return string_text("Print this message and quit.");
+        case M_BUILD: return string_text("Build library.");
+        case M_TEST:  return string_text("Build library, tests and then run tests.");
+        case M_DOCS:  return string_text("Generate documentation.");
+        case M_LSP:   return string_text("Generate LSP files (clangd).");
         case M_COUNT: break;
     }
+    unreachable();
+}
+String target_to_str( Target target ) {
+    switch( target ) {
+        case T_NATIVE: return string_text("native");
+        case T_COUNT: break;
+    }
+    unreachable();
+}
+bool target_from_str( String str, Target* out_target ) {
+    for( Target target = 0; target < T_COUNT; ++target ) {
+        if( string_cmp( str, target_to_str( target ) ) ) {
+            *out_target = target;
+            return true;
+        }
+    }
+    return false;
+}
+Platform platform_current(void) {
+#if defined(PLATFORM_WINDOWS)
+    return P_WINDOWS;
+#elif defined(PLATFORM_LINUX)
+    return P_LINUX;
+#elif defined(PLATFORM_MACOS)
+    return P_MACOS;
+#else
+    return P_UNKNOWN;
+#endif
+}
+String platform_friendly_name( Platform platform ) {
+    switch( platform ) {
+        case P_WINDOWS : string_text( "windows" );
+        case P_LINUX   : string_text( "linux" );
+        case P_MACOS   : string_text( "macos" );
+        case P_UNKNOWN : string_text( "unknown" );
+    }
+    unreachable();
+}
+String platform_name( Platform platform ) {
+    switch( platform ) {
+        case P_WINDOWS : string_text( "win32" ); // lol
+        case P_LINUX   : string_text( "linux" );
+        case P_MACOS   : string_text( "macos" );
+        case P_UNKNOWN : string_text( "unknown" );
+    }
+    unreachable();
 }
 
 #define CBUILD_IMPLEMENTATION

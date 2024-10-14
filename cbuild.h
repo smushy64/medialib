@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
+#include <string.h>
 // IWYU pragma: end_exports
 
 #if !(defined(COMPILER_CLANG) || defined(COMPILER_GCC) || defined(COMPILER_MSVC) || defined(COMPILER_UNKNOWN))
@@ -187,11 +188,14 @@ typedef u64 b64;
     typedef volatile i64 atom64;
 #endif
 
-/// @brief String is UTF-8 encoded and null-terminated.
-typedef char cstr;
 /// @brief String is dynamically allocated on the heap,
 /// UTF-8 encoded and null-terminated.
-typedef char dstring;
+typedef char DString;
+/// @brief Macro for marking a dynamic array.
+/// @details
+/// Just pastes @c T *
+/// @param T (type) Type of array.
+#define Darray(T) T *
 /// @brief String slice. Not necessarily null-terminated.
 /// @note When printing, use "%.*s" format specifier and
 /// provide length followed by pointer in args.
@@ -200,7 +204,7 @@ typedef struct {
     usize len;
     /// @brief Pointer to start of string buffer.
     const char* cc;
-} string;
+} String;
 /// @brief Logger levels.
 typedef enum {
     /// @brief Info level.
@@ -256,10 +260,12 @@ typedef enum {
 #endif
 /// @brief Opaque mutex handle.
 typedef struct {
+    /// @brief Opaque handle.
     void* handle;
 } Mutex;
 /// @brief Opaque semaphore handle.
 typedef struct {
+    /// @brief Opaque handle.
     void* handle;
 } Semaphore;
 /// @brief Cross-platform pipe for reading.
@@ -273,21 +279,23 @@ typedef struct {
     /// @brief Number of arguments.
     usize        count;
     /// @brief Array of arguments. Last item in array is a null-pointer.
-    const cstr** args;
+    const char** args;
 } Command;
-/// @brief Object for dynamically creating a command. Do not use fields directly.
+/// @brief Command line argument builder.
 typedef struct {
-    usize*   args; // darray
-    dstring* buf;
-    b32      is_offsets;
+    /// @brief Character buffer.
+    Darray(char) buf;
+    /// @brief Array of strings.
+    Darray(const char*) args;
 } CommandBuilder;
 /// @brief Result of walking a directory.
 typedef struct {
     /// @brief Number of paths found in directory.
     usize    count;
     /// @brief Dynamic array of paths found in directory.
-    string*  paths;
-    dstring* buf;
+    Darray(String) paths;
+    /// @brief String buffer.
+    DString* buf;
 } WalkDirectory;
 /// @brief Hang thread on wait.
 #define MT_WAIT_INFINITE (UINT32_MAX)
@@ -299,7 +307,7 @@ typedef void JobFN( void* params );
 /// @param     str    String to be filtered.
 /// @param[in] params (optional) Pointer to additional parameters.
 /// @return Filtered string.
-typedef string StringSplitDelimFilterFN( usize index, string str, void* params );
+typedef String StringSplitDelimFilterFN( usize index, String str, void* params );
 /// @brief Filter prototype for dynamic array.
 /// @param     index       Index of item being tested.
 /// @param     item_stride Size of items in array.
@@ -316,19 +324,26 @@ static inline void _0( int _, ... ) {(void)_;}
 /// @param ... Variables to be marked as unused.
 #define unused( ... ) _0( 0, __VA_ARGS__ )
 
+/// @brief Insert a panic.
 #define __insert_panic() exit(-1)
 
 #if defined(COMPILER_MSVC)
+    /// @brief Insert an unreachable statement.
     #define __insert_unreachable() __assume(0)
     /// @brief Insert a debugger break statement.
     #define insert_break()         __debugbreak()
+    /// @brief Insert a runtime crash.
     #define __insert_crash()       __debugbreak()
+    /// @brief Mark function as no return.
     #define does_not_return()      __declspec( noreturn )
 #else
+    /// @brief Insert an unreachable statement.
     #define __insert_unreachable() __builtin_unreachable()
     /// @brief Insert a debugger break statement.
     #define insert_break()         __builtin_debugtrap()
+    /// @brief Insert a runtime crash.
     #define __insert_crash()       __builtin_trap()
+    /// @brief Mark function as no return.
     #define does_not_return()      _Noreturn
 #endif
 
@@ -386,8 +401,8 @@ static inline void _0( int _, ... ) {(void)_;}
 /// @param[in] cbuild_executable_name  Name of cbuild executable (argv[0]).
 /// @param     reload                  Reloads cbuild after rebuilding. Only supported on POSIX platforms.
 does_not_return() void cbuild_rebuild(
-    const cstr* cbuild_source_file_name,
-    const cstr* cbuild_executable_name, b32 reload );
+    const char* cbuild_source_file_name,
+    const char* cbuild_executable_name, b32 reload );
 
 /// @brief Allocate memory on the heap. Always returns zeroed memory.
 /// @warning
@@ -466,95 +481,37 @@ b32 memory_cmp( const void* a, const void* b, usize size );
 /// @return
 ///     - @c True  : @c c is in @c set.
 ///     - @c False : @c c is not in @c set.
-b32 char_in_set( char c, string set );
+b32 char_in_set( char c, String set );
 
-/// @brief Calculate length of null-terminated string.
-/// @param[in] string Pointer to character buffer.
-/// @return Length of @c string.
-usize cstr_len( const cstr* string );
 /// @brief Calculate UTF-8 length of null-terminated string.
 /// @note
 /// Does not check if @c string is a valid UTF-8 string!
 /// @param[in] string Pointer to character buffer.
 /// @return UTF-8 length of @c string.
-usize cstr_len_utf8( const cstr* string );
-/// @brief Compare two null-terminated strings for equality.
-/// @param[in] a, b Strings to compare.
-/// @return
-///     - @c True  : Strings @c a and @c b are equal.
-///     - @c False : Strings @c a and @c b are not equal.
-b32 cstr_cmp( const cstr* a, const cstr* b );
-/// @brief Search for character in null-terminated string.
-/// @param[in]  string        String to search in.
-/// @param      c             ASCII character to search for.
-/// @param[out] opt_out_index (optional) Pointer to store index of @c c if it was found.
-/// @return
-///     - @c True  : @c c was found in @c string.
-///     - @c False : @c c was not found in @c string.
-b32 cstr_find( const cstr* string, char c, usize* opt_out_index );
-/// @brief Search for character in null-terminated string from end of string.
-/// @param[in]  string        String to search in.
-/// @param      c             ASCII character to search for.
-/// @param[out] opt_out_index (optional) Pointer to store index of @c c if it was found.
-/// @return
-///     - @c True  : @c c was found in @c string.
-///     - @c False : @c c was not found in @c string.
-b32 cstr_find_rev( const cstr* string, char c, usize* opt_out_index );
-/// @brief Search for a set of characters in null-terminated string.
-/// @param[in]  string        String to search in.
-/// @param[in]  set           Set of ASCII characters to search for.
-/// @param[out] opt_out_index (optional) Pointer to store index of first character in set found.
-/// @return
-///     - @c True  : Character in @c set was found in @c string.
-///     - @c False : Character in @c set was not found in @c string.
-b32 cstr_find_set( const cstr* string, const cstr* set, usize* opt_out_index );
-/// @brief Search for a set of characters in null-terminated string from end of string.
-/// @param[in]  string        String to search in.
-/// @param[in]  set           Set of ASCII characters to search for.
-/// @param[out] opt_out_index (optional) Pointer to store index of first character in set found.
-/// @return
-///     - @c True  : Character in @c set was found in @c string.
-///     - @c False : Character in @c set was not found in @c string.
-b32 cstr_find_set_rev( const cstr* string, const cstr* set, usize* opt_out_index );
-/// @brief Search for substring in null-terminated string.
-/// @param[in]  string        String to search in.
-/// @param[in]  substr        String to search for.
-/// @param[out] opt_out_index (optional) Pointer to store index of @c substr if it was found.
-/// @return
-///     - @c True  : @c substr was found in @c string.
-///     - @c False : @c substr was not found in @c string.
-b32 cstr_find_cstr( const cstr* string, const cstr* substr, usize* opt_out_index );
-/// @brief Search for substring in null-terminated string from end of string.
-/// @param[in]  string        String to search in.
-/// @param[in]  substr        String to search for.
-/// @param[out] opt_out_index (optional) Pointer to store index of @c substr if it was found.
-/// @return
-///     - @c True  : @c substr was found in @c string.
-///     - @c False : @c substr was not found in @c string.
-b32 cstr_find_cstr_rev( const cstr* string, const cstr* substr, usize* opt_out_index );
+usize strlen_utf8( const char* string );
 
 /// @brief Create an empty string.
 /// @return Empty @c string.
 #define string_empty()\
-    (string){ .cc=0, .len=0 }
+    (String){ .cc=0, .len=0 }
 /// @brief Create a new string from length and buffer.
 /// @param     length (usize) Length of string buffer.
 /// @param[in] buf    (const char*) Pointer to start of buffer.
 /// @return New @c string.
 #define string_new( length, buf )\
-    (string){ .cc=buf, .len=length }
+    (String){ .cc=buf, .len=length }
 /// @brief Create a new string from string literal.
 /// @param literal (string literal) Literal to make string out of.
 /// @return New @c string.
 #define string_text( literal )\
     string_new( sizeof(literal) - 1, literal )
 /// @brief Create a new string from null-terminated string.
-/// @param s (const cstr*) Null-terminated to make string out of.
+/// @param s (const char*) Null-terminated to make string out of.
 /// @return New @c string.
 #define string_from_cstr( s )\
-    string_new( cstr_len( s ), s )
+    string_new( strlen( s ), s )
 /// @brief Create a new string from dynamic string.
-/// @param d (const dstring*) Dynamic string to make string out of.
+/// @param d (const DString*) Dynamic string to make string out of.
 /// @return New @c string.
 #define string_from_dstring( d )\
     string_new( dstring_len( d ), d )
@@ -563,27 +520,20 @@ b32 cstr_find_cstr_rev( const cstr* string, const cstr* substr, usize* opt_out_i
 /// @return
 ///     - @c True  : @c str is empty.
 ///     - @c False : @c str is not empty.
-b32 string_is_empty( string str );
+b32 string_is_empty( String str );
 /// @brief Check if string is null-terminated.
 /// @param str String to check.
 /// @return
 ///     - @c True  : @c str is null-terminated.
 ///     - @c False : @c str is not null-terminated.
-b32 string_is_null_terminated( string str );
+b32 string_is_null_terminated( String str );
 /// @brief Compare two strings for equality.
 /// First compares string lengths, then compares contents.
 /// @param a, b Strings to compare.
 /// @return
 ///     - @c True  : Strings @c a and @c b are equal.
 ///     - @c False : Strings @c a and @c b are not equal.
-b32 string_cmp( string a, string b );
-/// @brief Compare two strings for equality.
-/// Uses shortest string length to compare instead of comparing lengths first.
-/// @param a, b Strings to compare.
-/// @return
-///     - @c True  : Strings @c a and @c b are equal.
-///     - @c False : Strings @c a and @c b are not equal.
-b32 string_cmp_clamped( string a, string b );
+b32 string_cmp( String a, String b );
 /// @brief Search for character in string.
 /// @param      str           String to search in.
 /// @param      c             ASCII character to search for.
@@ -591,7 +541,7 @@ b32 string_cmp_clamped( string a, string b );
 /// @return
 ///     - @c True  : @c c was found in @c string.
 ///     - @c False : @c c was not found in @c string.
-b32 string_find( string str, char c, usize* opt_out_index );
+b32 string_find( String str, char c, usize* opt_out_index );
 /// @brief Search for character in string from end of string.
 /// @param      str           String to search in.
 /// @param      c             ASCII character to search for.
@@ -599,7 +549,7 @@ b32 string_find( string str, char c, usize* opt_out_index );
 /// @return
 ///     - @c True  : @c c was found in @c string.
 ///     - @c False : @c c was not found in @c string.
-b32 string_find_rev( string str, char c, usize* opt_out_index );
+b32 string_find_rev( String str, char c, usize* opt_out_index );
 /// @brief Search for a set of characters in string.
 /// @param      str           String to search in.
 /// @param      set           Set of ASCII characters to search for.
@@ -607,7 +557,7 @@ b32 string_find_rev( string str, char c, usize* opt_out_index );
 /// @return
 ///     - @c True  : Character in @c set was found in @c string.
 ///     - @c False : Character in @c set was not found in @c string.
-b32 string_find_set( string str, string set, usize* opt_out_index );
+b32 string_find_set( String str, String set, usize* opt_out_index );
 /// @brief Search for a set of characters in string from end of string.
 /// @param      str           String to search in.
 /// @param      set           Set of ASCII characters to search for.
@@ -615,7 +565,7 @@ b32 string_find_set( string str, string set, usize* opt_out_index );
 /// @return
 ///     - @c True  : Character in @c set was found in @c string.
 ///     - @c False : Character in @c set was not found in @c string.
-b32 string_find_set_rev( string str, string set, usize* opt_out_index );
+b32 string_find_set_rev( String str, String set, usize* opt_out_index );
 /// @brief Search for substring in string.
 /// @param      str           String to search in.
 /// @param      substr        String to search for.
@@ -623,7 +573,7 @@ b32 string_find_set_rev( string str, string set, usize* opt_out_index );
 /// @return
 ///     - @c True  : @c substr was found in @c string.
 ///     - @c False : @c substr was not found in @c string.
-b32 string_find_string( string str, string substr, usize* opt_out_index );
+b32 string_find_string( String str, String substr, usize* opt_out_index );
 /// @brief Search for substring in string from end of string.
 /// @param      str           String to search in.
 /// @param      substr        String to search for.
@@ -631,32 +581,32 @@ b32 string_find_string( string str, string substr, usize* opt_out_index );
 /// @return
 ///     - @c True  : @c substr was found in @c string.
 ///     - @c False : @c substr was not found in @c string.
-b32 string_find_string_rev( string str, string substr, usize* opt_out_index );
+b32 string_find_string_rev( String str, String substr, usize* opt_out_index );
 /// @brief Get pointer to first character in string.
 /// @param str String to get character from.
 /// @return
 ///     - @c Pointer : @c str is not empty.
 ///     - @c NULL    : @c str is empty.
-char* string_first( string str );
+char* string_first( String str );
 /// @brief Get pointer to last character in string.
 /// @param str String to get character from.
 /// @return
 ///     - @c Pointer : @c str is not empty.
 ///     - @c NULL    : @c str is empty.
-char* string_last( string str );
+char* string_last( String str );
 /// @brief Advance string forward by one character.
 /// @param str String to advance.
 /// @return
 ///     - @c string       : String one character forward.
 ///     - @c empty string : String has no more characters.
-string string_adv( string str );
+String string_advance( String str );
 /// @brief Advance string forward by given number of characters.
 /// @param str    String to advance.
 /// @param stride Number of characters to advance by.
 /// @return
 ///     - @c string       : String @c stride number of characters forward.
 ///     - @c empty string : String has no more characters or stride >= @c str.len.
-string string_adv_by( string str, usize stride );
+String string_advance_by( String str, usize stride );
 /// @brief Shorten string length to maximum.
 /// @details
 /// Does nothing if max > str.len.
@@ -664,7 +614,7 @@ string string_adv_by( string str, usize stride );
 /// @param str String to truncate.
 /// @param max Maximum length to truncate to.
 /// @return Truncated string.
-string string_truncate( string str, usize max );
+String string_truncate( String str, usize max );
 /// @brief Subtract from string length.
 /// @details
 /// Does nothing if amount == 0. 
@@ -672,19 +622,19 @@ string string_truncate( string str, usize max );
 /// @param str    String to trim.
 /// @param amount Number of characters to trim from the end.
 /// @return Trimmed string.
-string string_trim( string str, usize amount );
+String string_trim( String str, usize amount );
 /// @brief Remove leading whitespace characters from string.
 /// @param str String to remove from.
 /// @return @c str without leading whitespace.
-string string_remove_ws_lead( string str );
+String string_trim_leading_whitespace( String str );
 /// @brief Remove trailing whitespace characters from string.
 /// @param str String to remove from.
 /// @return @c str without trailing whitespace.
-string string_remove_ws_trail( string str );
+String string_trim_trailing_whitespace( String str );
 /// @brief Remove leading and trailing whitespace characters from string.
 /// @param str String to remove from.
 /// @return @c str without leading or trailing whitespace.
-string string_remove_ws_surround( string str );
+String string_trim_surrounding_whitespace( String str );
 /// @brief Split string in two from given index.
 /// @warning
 /// expect() 's that @c at is <= @c str.len!
@@ -694,8 +644,8 @@ string string_remove_ws_surround( string str );
 /// @param[out] opt_out_left  (optional) Pointer to write left side to.
 /// @param[out] opt_out_right (optional) Pointer to write right side to.
 void string_split_at(
-    string src, usize at, b32 keep_split,
-    string* opt_out_left, string* opt_out_right );
+    String src, usize at, b32 keep_split,
+    String* opt_out_left, String* opt_out_right );
 /// @brief Split string at first instance of character.
 /// @param      src           String to split.
 /// @param      c             Character to split at.
@@ -706,8 +656,8 @@ void string_split_at(
 ///     - @c True  : Character @c c was found in @c src and string was split.
 ///     - @c False : Character @c c was not found in @c src.
 b32 string_split_char(
-    string src, char c, b32 keep_split,
-    string* opt_out_left, string* opt_out_right );
+    String src, char c, b32 keep_split,
+    String* opt_out_left, String* opt_out_right );
 /// @brief Split string by delimiter. Allocates dynamic array.
 /// @param src        String to split.
 /// @param delim      Delimiter to split by.
@@ -715,7 +665,7 @@ b32 string_split_char(
 /// @return
 ///     - @c Dynamic array of strings : Dynamic array was allocated with splits.
 ///     - @c NULL : Failed to allocate dynamic array of splits.
-string* string_split_delim( string src, string delim, b32 keep_delim );
+String* string_split_delim( String src, String delim, b32 keep_delim );
 /// @brief Split string by delimiter. Allocates dynamic array.
 /// @param src        String to split.
 /// @param delim      Delimiter character to split by.
@@ -734,8 +684,8 @@ string* string_split_delim( string src, string delim, b32 keep_delim );
 /// @return
 ///     - @c Dynamic array of strings : Dynamic array was allocated with splits.
 ///     - @c NULL : Failed to allocate dynamic array of splits.
-string* string_split_delim_ex(
-    string src, string delim, b32 keep_delim,
+String* string_split_delim_ex(
+    String src, String delim, b32 keep_delim,
     StringSplitDelimFilterFN* filter, void* params );
 /// @brief Split string by delimiter. Allocates dynamic array.
 /// @param     src        String to split.
@@ -754,14 +704,14 @@ string* string_split_delim_ex(
 /// Does not check if @c string is a valid UTF-8 string!
 /// @param str String to get UTF-8 length of.
 /// @return UTF-8 length of @c str.
-usize string_len_utf8( string str );
+usize string_len_utf8( String str );
 
 /// @brief Allocate an empty dynamic string with given capacity.
 /// @param cap Capacity to allocate.
 /// @return
 ///     - @c Dynamic String : Buffer was successfully allocated.
 ///     - @c NULL : Failed to allocate dynamic string.
-dstring* dstring_empty( usize cap );
+DString* dstring_empty( usize cap );
 /// @brief Create new dynamic string from string buffer.
 /// @details
 /// Allocates appropriately sized dynamic string and
@@ -772,17 +722,17 @@ dstring* dstring_empty( usize cap );
 /// @return
 ///     - @c Dynamic String : Buffer was successfully allocated.
 ///     - @c NULL : Failed to allocate dynamic string.
-dstring* dstring_new( usize len, const char* str );
+DString* dstring_new( usize len, const char* str );
 /// @brief Create a new dynamic string from null-terminated string.
 /// @details
 /// Allocates appropriately sized dynamic string and
 /// copies characters from @c str into it.
 /// Dynamic strings are always null-terminated.
-/// @param[in] str (const cstr*) Pointer to null-terminated string.
+/// @param[in] str (const char*) Pointer to null-terminated string.
 /// @return
 ///     - @c Dynamic String : Buffer was successfully allocated.
 ///     - @c NULL : Failed to allocate dynamic string.
-#define dstring_from_cstr( str ) dstring_new( cstr_len( str ), str )
+#define dstring_from_cstr( str ) dstring_new( strlen( str ), str )
 /// @brief Create a new dynamic string from string.
 /// @details
 /// Allocates appropriately sized dynamic string and
@@ -815,7 +765,7 @@ dstring* dstring_new( usize len, const char* str );
 ///     - @c NULL : Failed to allocate dynamic string.
 #define dstring_text( literal ) dstring_new( sizeof(literal)-1, literal )
 /// @brief Create string from dynamic string.
-/// @param dstr (dstring*) Dynamic string to create string from.
+/// @param dstr (DString*) Dynamic string to create string from.
 /// @return (string) String.
 #define dstring_to_string( dstr ) string_from_dstring( dstr )
 /// @brief Create a formatted dynamic string.
@@ -824,35 +774,35 @@ dstring* dstring_new( usize len, const char* str );
 /// @return
 ///     - @c Dynamic String : Buffer was successfully allocated.
 ///     - @c NULL : Failed to allocate dynamic string.
-dstring* dstring_fmt_va( const cstr* format, va_list va );
+DString* dstring_fmt_va( const char* format, va_list va );
 /// @brief Create a formatted dynamic string.
 /// @param[in] format Format string literal.
 /// @param     ...    Format arguments.
 /// @return
 ///     - @c Dynamic String : Buffer was successfully allocated.
 ///     - @c NULL : Failed to allocate dynamic string.
-dstring* dstring_fmt( const cstr* format, ... );
+DString* dstring_fmt( const char* format, ... );
 /// @brief Attempt to reallocate dynamic string buffer.
 /// @param[in] str    Dynamic string to reallocate.
 /// @param     amount Additional capacity to reallocate. Gets added to existing capacity.
 /// @return 
 ///     - @c Dynamic String : Buffer was successfully reallocated.
 ///     - @c NULL : Failed to reallocate dynamic string.
-dstring* dstring_grow( dstring* str, usize amount );
+DString* dstring_grow( DString* str, usize amount );
 /// @brief Create a new dynamic string from existing dynamic string.
 /// @param[in] src Dynamic string to clone.
 /// @return
 ///     - @c Dynamic String : Buffer was successfully allocated.
 ///     - @c NULL : Failed to allocate dynamic string.
-dstring* dstring_clone( const dstring* src );
+DString* dstring_clone( const DString* src );
 /// @brief Create dynamic string by concatenating two strings.
 /// @param lhs, rhs Strings to concatenate.
 /// @return
 ///     - @c Dynamic String : Buffer was successfully allocated.
 ///     - @c NULL : Failed to allocate dynamic string.
-dstring* dstring_concat( string lhs, string rhs );
+DString* dstring_concat( String lhs, String rhs );
 /// @brief Create dynamic string by concatenating two null-terminated strings.
-/// @param[in] lhs, rhs (const cstr*) Strings to concatenate.
+/// @param[in] lhs, rhs (const char*) Strings to concatenate.
 /// @return
 ///     - @c Dynamic String : Buffer was successfully allocated.
 ///     - @c NULL : Failed to allocate dynamic string.
@@ -865,8 +815,8 @@ dstring* dstring_concat( string lhs, string rhs );
 /// @return
 ///     - @c Dynamic String : Buffer was successfully allocated.
 ///     - @c NULL : Failed to allocate dynamic string.
-dstring* dstring_concat_multi(
-    usize count, const string* strings, string opt_separator );
+DString* dstring_concat_multi(
+    usize count, const String* strings, String opt_separator );
 /// @brief Create dynamic string by concatenating multiple null-terminated strings.
 /// @param     count         Number of strings to concatenate.
 /// @param[in] strings       Pointer to strings to concatenate.
@@ -874,15 +824,15 @@ dstring* dstring_concat_multi(
 /// @return
 ///     - @c Dynamic String : Buffer was successfully allocated.
 ///     - @c NULL : Failed to allocate dynamic string.
-dstring* dstring_concat_multi_cstr(
-    usize count, const cstr** strings, const cstr* opt_separator );
+DString* dstring_concat_multi_cstr(
+    usize count, const char** strings, const char* opt_separator );
 /// @brief Append string to end of dynamic string.
 /// @param[in] str    Dynamic string to append to.
 /// @param     append String to append.
 /// @return
 ///     - @c Dynamic String : Append was successful.
 ///     - @c NULL : Failed to reallocate dynamic string.
-dstring* dstring_append( dstring* str, string append );
+DString* dstring_append( DString* str, String append );
 /// @brief Append null-terminated string to end of dynamic string.
 /// @param[in] str    Dynamic string to append to.
 /// @param[in] append Null-terminated string to append.
@@ -892,7 +842,7 @@ dstring* dstring_append( dstring* str, string append );
 #define dstring_append_cstr( str, append )\
     dstring_append( str, string_from_cstr( append ) )
 /// @brief Append string literal to end of dynamic string.
-/// @param[in] str     (dstring*)       Dynamic string to append to.
+/// @param[in] str     (DString*)       Dynamic string to append to.
 /// @param     literal (string litearl) String literal to append.
 /// @return
 ///     - @c Dynamic String : Append was successful.
@@ -905,7 +855,7 @@ dstring* dstring_append( dstring* str, string append );
 /// @return
 ///     - @c Dynamic String : Prepend was successful.
 ///     - @c NULL : Failed to reallocate dynamic string.
-dstring* dstring_prepend( dstring* str, string prepend );
+DString* dstring_prepend( DString* str, String prepend );
 /// @brief Prepend null-terminated string to end of dynamic string.
 /// @param[in] str     Dynamic string to prepend to.
 /// @param[in] prepend Null-terminated string to prepend.
@@ -915,7 +865,7 @@ dstring* dstring_prepend( dstring* str, string prepend );
 #define dstring_prepend_cstr( str, prepend )\
     dstring_prepend( str, string_from_cstr( prepend ) )
 /// @brief Prepend string literal to end of dynamic string.
-/// @param[in] str     (dstring*)       Dynamic string to prepend to.
+/// @param[in] str     (DString*)       Dynamic string to prepend to.
 /// @param     literal (string litearl) String literal to prepend.
 /// @return
 ///     - @c Dynamic String : Prepend was successful.
@@ -929,7 +879,7 @@ dstring* dstring_prepend( dstring* str, string prepend );
 /// @return
 ///     - @c Dynamic String : Insert was successful.
 ///     - @c NULL : Failed to reallocate dynamic string.
-dstring* dstring_insert( dstring* str, string insert, usize at );
+DString* dstring_insert( DString* str, String insert, usize at );
 /// @brief Insert null-terminated string inside dynamic string.
 /// @param[in] str    Dynamic string to insert in.
 /// @param[in] insert String to insert.
@@ -954,7 +904,7 @@ dstring* dstring_insert( dstring* str, string insert, usize at );
 /// @return
 ///     - @c Dynamic String : Push was successful.
 ///     - @c NULL : Failed to reallocate dynamic string.
-dstring* dstring_push( dstring* str, char c );
+DString* dstring_push( DString* str, char c );
 /// @brief Emplace character inside of dynamic string.
 /// @param[in] str Dynamic string to emplace into.
 /// @param     c   Character to emplace.
@@ -962,21 +912,21 @@ dstring* dstring_push( dstring* str, char c );
 /// @return
 ///     - @c Dynamic String : Push was successful.
 ///     - @c NULL : Failed to reallocate dynamic string.
-dstring* dstring_emplace( dstring* str, char c, usize at );
+DString* dstring_emplace( DString* str, char c, usize at );
 /// @brief Pop last character from dynamic string, if available.
 /// @param[in]  str       Dynamic string to pop character from.
 /// @param[out] opt_out_c (optional) Pointer to write popped character to.
 /// @return
 ///     - @c True  : @c str has a character to pop.
 ///     - @c False : @c str is empty.
-b32 dstring_pop( dstring* str, char* opt_out_c );
+b32 dstring_pop( DString* str, char* opt_out_c );
 /// @brief Remove character from dynamic string.
 /// @param[in] str   Dynamic string to remove character from.
 /// @param     index Index of character to remove.
 /// @return
 ///     - @c True  : @c index was in bounds of @c str and was removed.
 ///     - @c False : @c index was out of bounds.
-b32 dstring_remove( dstring* str, usize index );
+b32 dstring_remove( DString* str, usize index );
 /// @brief Remove range of characters from dynamic string.
 /// @details
 /// With assertions on, asserts that from < to.
@@ -986,73 +936,73 @@ b32 dstring_remove( dstring* str, usize index );
 /// @return
 ///     - @c True  : Range was in bounds of @c str and was removed.
 ///     - @c False : Range was out of bounds.
-b32 dstring_remove_range( dstring* str, usize from_inclusive, usize to_exclusive );
+b32 dstring_remove_range( DString* str, usize from_inclusive, usize to_exclusive );
 /// @brief Shorten dynamic string length to maximum.
 /// @details
 /// Does nothing if max > str.len.
 /// Returns empty string if max == 0.
 /// @param[in] str Dynamic string to truncate.
 /// @param     max Maximum length to truncate to.
-void dstring_truncate( dstring* str, usize max );
+void dstring_truncate( DString* str, usize max );
 /// @brief Subtract from dynamic string length.
 /// @details
 /// Does nothing if amount == 0. 
 /// Returns empty string if amount >= str.len.
 /// @param[in] str    Dynamic string to trim.
 /// @param     amount Number of characters to trim from the end.
-void dstring_trim( dstring* str, usize amount );
+void dstring_trim( DString* str, usize amount );
 /// @brief Set length of dynamic string to zero and zero out memory.
 /// @note This does not free the string!
 /// @param[in] str Dynamic string to clear.
-void dstring_clear( dstring* str );
+void dstring_clear( DString* str );
 /// @brief Calculate remaining capacity in dynamic string.
 /// @param[in] str Dynamic string.
 /// @return Remaining capacity. Does not include null byte.
-usize dstring_remaining( const dstring* str );
+usize dstring_remaining( const DString* str );
 /// @brief Get length of dynamic string.
 /// @param[in] str Dynamic string.
 /// @return Length not including null byte.
-usize dstring_len( const dstring* str );
+usize dstring_len( const DString* str );
 /// @brief Get capacity of dynamic string.
 /// @param[in] str Dynamic string.
 /// @return Total capacity, includes null byte.
-usize dstring_cap( const dstring* str );
+usize dstring_cap( const DString* str );
 /// @brief Get total heap memory usage of dynamic string.
 /// @param[in] str Dynamic string.
 /// @return Total memory usage.
-usize dstring_total_size( const dstring* str );
+usize dstring_total_size( const DString* str );
 /// @brief Check if dynamic string is empty.
 /// @param[in] str Dynamic string.
 /// @return
 ///     - @c True  : Length is zero.
 ///     - @c False : Length is not zero.
-b32 dstring_is_empty( const dstring* str );
+b32 dstring_is_empty( const DString* str );
 /// @brief Check if dynamic string is full.
 /// @param[in] str Dynamic string.
 /// @return
 ///     - @c True  : Length equals capacity - 1.
 ///     - @c False : Dynamic string has remaining capacity.
-b32 dstring_is_full( const dstring* str );
+b32 dstring_is_full( const DString* str );
 /// @brief Get mutable pointer to start of dynamic string buffer.
 /// @details
 /// Used internally.
 /// Returns NULL if @c str is NULL.
 /// @param str Dynamic string.
 /// @return Start of dynamic string.
-void* dstring_head( dstring* str );
+void* dstring_head( DString* str );
 /// @brief Get pointer to start of dynamic string buffer.
 /// @details
 /// Used internally.
 /// Returns NULL if @c str is NULL.
 /// @param str Dynamic string.
 /// @return Start of dynamic string.
-const void* dstring_head_const( const dstring* str );
+const void* dstring_head_const( const DString* str );
 /// @brief Free a dynamic string.
 /// @details
 /// Use this function instead of memory_free() as string pointer
 /// is not the pointer allocated from system.
 /// @param[in] str Dynamic string.
-void dstring_free( dstring* str );
+void dstring_free( DString* str );
 
 /// @brief Allocate an empty dynamic array.
 /// @param stride Size of items in dynamic array.
@@ -1303,16 +1253,16 @@ void darray_free( void* darray );
 
 /// @brief Get read-only string containing current working directory.
 /// @return Read-only string containing current working directory.
-string path_cwd(void);
+String path_cwd(void);
 /// @brief Get read-only string containing home directory.
 /// @return Read-only string containing home directory.
-string path_home(void);
+String path_home(void);
 /// @brief Check if path is absolute.
 /// @param[in] path Path to check.
 /// @return
 ///     - @c True  : @c path is an absolute path.
 ///     - @c False : @c path is a relative path.
-b32 path_is_absolute( const cstr* path );
+b32 path_is_absolute( const char* path );
 /// @brief Check if path points to a file/directory.
 /// @details
 /// Untested: if it returns false for files that require elevated permissions.
@@ -1320,24 +1270,24 @@ b32 path_is_absolute( const cstr* path );
 /// @return
 ///     - @c True  : @c path points to real file/directory.
 ///     - @c False : @c path does not point to file/directory.
-b32 path_exists( const cstr* path );
+b32 path_exists( const char* path );
 /// @brief Check if path points to directory.
 /// @param[in] path Path to check.
 /// @return
 ///     - @c True  : @c path points to existing directory.
 ///     - @c False : @c path points to something else.
 ///     - @c False : @c path does not point to existing directory.
-b32 path_is_directory( const cstr* path );
+b32 path_is_directory( const char* path );
 /// @brief Count number of path chunks in path.
 /// @param path Path to count.
 /// @return Number of chunks.
-usize path_chunk_count( string path );
+usize path_chunk_count( String path );
 /// @brief Split path into chunks.
 /// @param path Path to split.
 /// @return
 ///     - Dynamic array of chunks. Free with darray_free()
 ///     - NULL : Failed to allocate chunks array.
-string* path_chunk_split( string path );
+String* path_chunk_split( String path );
 /// @brief Check if path matches glob pattern.
 /// @details
 /// This is a very simple glob pattern.
@@ -1350,7 +1300,7 @@ string* path_chunk_split( string path );
 /// @return
 ///     - @c True  : @c path matches @c glob.
 ///     - @c False : @c path does not match @c glob.
-b32 path_matches_glob( string path, string glob );
+b32 path_matches_glob( String path, String glob );
 /// @brief Walk a directory, collecting all files/directories.
 /// @details
 /// If @c out_result is empty, allocates new buffers for it.
@@ -1364,7 +1314,7 @@ b32 path_matches_glob( string path, string glob );
 ///     - @c False : Failed to open @c dir.
 ///     - @c False : Failed to allocate results.
 b32 path_walk_dir(
-    const cstr* dir, b32 recursive,
+    const char* dir, b32 recursive,
     b32 include_dirs, WalkDirectory* out_result );
 /// @brief Create list of filtered paths from path_walk_dir() result.
 /// @param[in] wd   path_walk_dir() result to filter.
@@ -1372,7 +1322,7 @@ b32 path_walk_dir(
 /// @return
 ///     - Dynamic array of paths that match pattern.
 ///     - NULL : Failed to allocate result.
-string* path_walk_glob_filter( const WalkDirectory* wd, string glob );
+Darray(String) path_walk_glob_filter( const WalkDirectory* wd, String glob );
 /// @brief Free result of path_walk_dir().
 /// @param[in] wd Walk directory result to free.
 void path_walk_free( WalkDirectory* wd );
@@ -1387,7 +1337,7 @@ void path_walk_free( WalkDirectory* wd );
 /// @return
 ///     - @c True  : File was opened successfully.
 ///     - @c False : Failed to open file. Check log for more details.
-b32 fd_open( const cstr* path, FileOpenFlags flags, FD* out_file );
+b32 fd_open( const char* path, FileOpenFlags flags, FD* out_file );
 /// @brief Close a file descriptor.
 /// @param[in] file Pointer to file descriptor to close.
 void fd_close( FD* file );
@@ -1447,37 +1397,37 @@ usize fd_query_position( FD* file );
 /// @brief Query creation time of file at given path.
 /// @param[in] path Null-terminated path to file. Length must be <= 4096.
 /// @return Creation time in POSIX time.
-time_t file_query_time_create( const cstr* path );
+time_t file_query_time_create( const char* path );
 /// @brief Query last time modified of file at given path.
 /// @param[in] path Null-terminated path to file. Length must be <= 4096.
 /// @return Last time modified in POSIX time.
-time_t file_query_time_modify( const cstr* path );
+time_t file_query_time_modify( const char* path );
 /// @brief Move file from one path to another.
 /// @param[in] dst Null-terminated destination path. Length must be <= 4096.
 /// @param[in] src Null-terminated source path. Length must be <= 4096.
 /// @return
 ///     - @c True  : Successfully moved file.
 ///     - @c False : Failed to move file.
-b32 file_move( const cstr* dst, const cstr* src );
+b32 file_move( const char* dst, const char* src );
 /// @brief Copy file from one path to another.
 /// @param[in] dst Null-terminated destination path. Length must be <= 4096.
 /// @param[in] src Null-terminated source path. Length must be <= 4096.
 /// @return
 ///     - @c True  : Successfully copied file.
 ///     - @c False : Failed to copie file.
-b32 file_copy( const cstr* dst, const cstr* src );
+b32 file_copy( const char* dst, const char* src );
 /// @brief Remove file from system.
 /// @param[in] path Null-terminated path. Length must be <= 4096.
 /// @return
 ///     - @c True  : Successfully removed file.
 ///     - @c False : Failed to remove file.
-b32 file_remove( const cstr* path );
+b32 file_remove( const char* path );
 /// @brief Create directory.
 /// @param[in] path Path to create directory at.
 /// @return
 ///     - @c True  : Directory created successfully or it already exists.
 ///     - @c False : Failed to create directory.
-b32 dir_create( const cstr* path );
+b32 dir_create( const char* path );
 /// @brief Remove directory.
 /// @param[in] path      Path to directory to remove.
 /// @param     recursive If directory contains items.
@@ -1485,7 +1435,7 @@ b32 dir_create( const cstr* path );
 ///     - @c True  : Directory removed successfully.
 ///     - @c False : Failed to remove directory.
 ///     - @c False : Attempted to remove directory that is not empty without @c recursive.
-b32 dir_remove( const cstr* path, b32 recursive );
+b32 dir_remove( const char* path, b32 recursive );
 
 /// @brief Atomically add to atomic integer.
 /// @param[in, out] atomic Pointer to atomic to add to.
@@ -1647,31 +1597,48 @@ u32 thread_id(void);
 /// @return
 ///     - Dynamic string, free with dstring_free().
 ///     - NULL : Failed to allocate result.
-dstring* command_flatten_dstring( const Command* command );
-/// @brief Convert command to null-terminated local string.
-/// @param[in] command Command to convert.
-/// @return Local string containing commmand line.
-const cstr* command_flatten_local( const Command* command );
+DString* command_flatten_dstring( const Command* command );
 
-/// @brief Create a new command builder.
-/// @param[in]  path        Path to process.
-/// @param[out] out_builder Pointer to write new command builder to.
+/// @brief Create command builder.
+/// @param[in]  exe         Name of executable.
+/// @param[out] out_builder Pointer to write result to.
 /// @return
-///     - @c True  : Successfully created new command builder.
-///     - @c False : Failed to allocate command builder.
-b32 command_builder_new( const cstr* path, CommandBuilder* out_builder );
-/// @brief Push new argument to end of command builder.
-/// @param[in] builder Command builder to push to.
-/// @param[in] arg     Null-terminated argument to push.
+///     - true  : Allocated new command builder.
+///     - false : Failed to allocate new command builder.
+b32 command_builder_new( const char* exe, CommandBuilder* out_builder );
+/// @brief Clear command builder.
+/// @param[in] builder Builder to clear.
+void command_builder_clear( CommandBuilder* builder );
+/// @brief Push argument to end of command builder.
+/// @param[in] builder Builder to push to.
+/// @param[in] arg     Argument to push.
 /// @return
-///     - @c True  : Pushed new argument.
-///     - @c False : Failed to reallocate @c builder buffers.
-b32 command_builder_push( CommandBuilder* builder, const cstr* arg );
-/// @brief Create command from builder. Command is invalidated when @c builder is modified.
-/// @param[in] builder Command builder.
-/// @return Command. Do not use after @c builder is modified (push or free).
+///     - true  : Pushed argument successfully.
+///     - false : Failed to reallocate command builder.
+b32 command_builder_push( CommandBuilder* builder, const char* arg );
+b32 __internal_command_builder_append( CommandBuilder* builder, const char* first, ... );
+/// @brief Append arguments to end of command builder.
+/// @param[in] builder Builder to append to.
+/// @param     args... Arguments to append.
+/// @return
+///     - true  : Appended arguments successfully.
+///     - false : Failed to reallocate command builder.
+#define command_builder_append( builder, ... )\
+    __internal_command_builder_append( builder, __VA_ARGS__, NULL )
+/// @brief Append list of arguments to end of command builder.
+/// @param[in] builder Builder to append to.
+/// @param     count   Number of arguments to append.
+/// @param[in] args    Pointer to list of arguments to append.
+/// @return
+///     - true  : Appended arguments successfully.
+///     - false : Failed to reallocate command builder.
+b32 command_builder_append_list(
+    CommandBuilder* builder, usize count, const char** args );
+/// @brief Convert builder to command.
+/// @param[in] builder Builder to convert.
+/// @return Command.
 Command command_builder_cmd( CommandBuilder* builder );
-/// @brief Free command builder buffers.
+/// @brief Free command builder.
 /// @param[in] builder Builder to free.
 void command_builder_free( CommandBuilder* builder );
 
@@ -1720,7 +1687,7 @@ void pipe_close( Pipe pipe );
 /// @return
 ///     - @c True  : Process is in path.
 ///     - @c False : Process is not in path.
-b32 process_in_path( const cstr* process_name );
+b32 process_in_path( const char* process_name );
 /// @brief Execute a process command.
 /// @param cmd Command to execute.
 /// @param redirect_void If output should just be redirected to void.
@@ -1733,7 +1700,7 @@ b32 process_in_path( const cstr* process_name );
 /// process_wait() or successful process_wait_timed().
 PID process_exec(
     Command cmd, b32 redirect_void, ReadPipe* opt_stdin,
-    WritePipe* opt_stdout, WritePipe* opt_stderr, const cstr* opt_cwd );
+    WritePipe* opt_stdout, WritePipe* opt_stderr, const char* opt_cwd );
 /// @brief Wait indefinitely for process to complete.
 /// @details
 /// This function discards @c pid.
@@ -1830,7 +1797,7 @@ void logger( LoggerLevel level, const char* format, ... );
 /// @details
 /// This name corresponds to the command used to compiler cbuild.
 /// @return String containing name of compiler.
-string cbuild_query_compiler(void);
+String cbuild_query_compiler(void);
 /// @brief Query command line arguments used in this instance of cbuild.
 /// @return Pointer to command.
 const Command* cbuild_query_command_line(void);
@@ -1929,8 +1896,8 @@ const Command* cbuild_query_command_line(void);
 
 void _init_(
     LoggerLevel logger_level,
-    const cstr* executable_name,
-    const cstr* source_name,
+    const char* executable_name,
+    const char* source_name,
     int argc, const char** argv );
 
 #endif /* header guard */
@@ -1948,8 +1915,8 @@ void _init_(
 struct GlobalBuffers {
     atom obtained; // atomic boolean
 
-    string cwd;
-    string home;
+    String cwd;
+    String home;
 
     ReadPipe  void_read;
     WritePipe void_write;
@@ -2005,8 +1972,8 @@ void  thread_create( JobFN* func, void* params );
 char* internal_cwd(void);
 char* internal_home(void);
 static b32 path_walk_dir_internal(
-    dstring** path, b32 recursive, b32 include_dirs,
-    usize* out_count, dstring** out_buffer );
+    DString** path, b32 recursive, b32 include_dirs,
+    usize* out_count, DString** out_buffer );
 
 static b32 job_dequeue( struct JobQueue* queue, struct JobEntry* out_entry ) {
     if( !queue->len ) {
@@ -2131,7 +2098,7 @@ static b32 validate_file_flags( FileOpenFlags flags ) {
 
     return true;
 }
-static b32 dir_remove_internal( const cstr* path );
+static b32 dir_remove_internal( const char* path );
 
 #if !defined(CBUILD_COMPILER_NAME)
     #if defined(COMPILER_MSVC)
@@ -2157,7 +2124,7 @@ static b32 dir_remove_internal( const cstr* path );
     #define CBUILD_POSIX_FLAGS "-pthread"
 #endif
 
-string cbuild_query_compiler(void) {
+String cbuild_query_compiler(void) {
     return string_text( CBUILD_COMPILER_NAME );
 }
 const Command* cbuild_query_command_line(void) {
@@ -2167,8 +2134,8 @@ const Command* cbuild_query_command_line(void) {
 void _platform_init_(void);
 void _init_(
     LoggerLevel logger_level,
-    const cstr* executable_name,
-    const cstr* source_name,
+    const char* executable_name,
+    const char* source_name,
     int argc, const char** argv
 ) {
     _platform_init_();
@@ -2218,8 +2185,8 @@ void _init_(
     cbuild_rebuild( source_name, executable_name, true );
 }
 does_not_return() void cbuild_rebuild(
-    const cstr* cbuild_source_file_name,
-    const cstr* cbuild_executable_name,
+    const char* cbuild_source_file_name,
+    const char* cbuild_executable_name,
     b32 reload
 ) {
 
@@ -2290,7 +2257,7 @@ does_not_return() void cbuild_rebuild(
 
 #if defined(COMPILER_MSVC)
     /* attempt to remove annoying .obj file generated by msvc */ {
-        string exe = string_from_cstr( cbuild_executable_name );
+        String exe = string_from_cstr( cbuild_executable_name );
         char* local = (char*)local_byte_buffer();
         memory_copy( local, exe.cc, exe.len );
         usize dot = 0;
@@ -2360,7 +2327,7 @@ b32 memory_cmp( const void* a, const void* b, usize size ) {
     return memcmp( a, b, size ) == 0;
 }
 
-b32 char_in_set( char c, string set ) {
+b32 char_in_set( char c, String set ) {
     for( usize i = 0; i < set.len; ++i ) {
         if( c == set.cc[i] ) {
             return true;
@@ -2369,70 +2336,14 @@ b32 char_in_set( char c, string set ) {
     return false;
 }
 
-usize cstr_len( const cstr* string ) {
-    return strlen( string );
-}
-usize cstr_len_utf8( const cstr* str ) {
+usize strlen_utf8( const char* str ) {
     return string_len_utf8( string_from_cstr( str ) );
 }
-b32 cstr_cmp( const cstr* a, const cstr* b ) {
-    return strcmp( a, b ) == 0;
-}
-b32 cstr_find( const cstr* string, char c, usize* opt_out_index ) {
-    char* res = strchr( string, c );
-    if( !res ) {
-        return false;
-    }
-    if( opt_out_index ) {
-        *opt_out_index = res - string;
-    }
-    return true;
-}
-b32 cstr_find_rev( const cstr* string, char c, usize* opt_out_index ) {
-    char* res = strrchr( string, c );
-    if( !res ) {
-        return false;
-    }
-    if( opt_out_index ) {
-        *opt_out_index = res - string;
-    }
-    return true;
-}
-b32 cstr_find_set( const cstr* string, const cstr* set, usize* opt_out_index ) {
-    char* res = strpbrk( string, set );
-    if( !res ) {
-        return false;
-    }
-    if( opt_out_index ) {
-        *opt_out_index = res - string;
-    }
-    return true;
-}
-b32 cstr_find_set_rev( const cstr* str, const cstr* set, usize* opt_out_index ) {
-    return string_find_set_rev(
-        string_from_cstr( str ), string_from_cstr( set ), opt_out_index );
-}
-b32 cstr_find_cstr( const cstr* string, const cstr* substr, usize* opt_out_index ) {
-    char* res = strstr( string, substr );
-    if( !res ) {
-        return false;
-    }
-    if( opt_out_index ) {
-        *opt_out_index = res - string;
-    }
-    return true;
-}
-b32 cstr_find_cstr_rev(
-    const cstr* str, const cstr* substr, usize* opt_out_index
-) {
-    return string_find_string_rev(
-        string_from_cstr( str ), string_from_cstr( substr ), opt_out_index );
-}
 
-b32 string_is_empty( string str ) {
+b32 string_is_empty( String str ) {
     return !(str.cc && str.len);
 }
-b32 string_is_null_terminated( string str ) {
+b32 string_is_null_terminated( String str ) {
     if( !str.cc[str.len] ) {
         return true;
     }
@@ -2441,17 +2352,13 @@ b32 string_is_null_terminated( string str ) {
     }
     return false;
 }
-b32 string_cmp( string a, string b ) {
+b32 string_cmp( String a, String b ) {
     if( a.len != b.len ) {
         return false;
     }
     return memory_cmp( a.cc, b.cc, a.len );
 }
-b32 string_cmp_clamped( string a, string b ) {
-    usize min = a.len > b.len ? b.len : a.len;
-    return memory_cmp( a.cc, b.cc, min );
-}
-b32 string_find( string str, char c, usize* opt_out_index ) {
+b32 string_find( String str, char c, usize* opt_out_index ) {
     const char* ptr = memchr( str.cc, c, str.len );
     if( !ptr ) {
         return false;
@@ -2461,7 +2368,7 @@ b32 string_find( string str, char c, usize* opt_out_index ) {
     }
     return true;
 }
-b32 string_find_rev( string str, char c, usize* opt_out_index ) {
+b32 string_find_rev( String str, char c, usize* opt_out_index ) {
     for( usize i = str.len; i-- > 0; ) {
         if( str.cc[i] == c ) {
             if( opt_out_index ) {
@@ -2472,7 +2379,7 @@ b32 string_find_rev( string str, char c, usize* opt_out_index ) {
     }
     return false;
 }
-b32 string_find_set( string str, string set, usize* opt_out_index ) {
+b32 string_find_set( String str, String set, usize* opt_out_index ) {
     for( usize i = 0; i < set.len; ++i ) {
         if( string_find( str, set.cc[i], opt_out_index ) ) {
             return true;
@@ -2480,7 +2387,7 @@ b32 string_find_set( string str, string set, usize* opt_out_index ) {
     }
     return false;
 }
-b32 string_find_set_rev( string str, string set, usize* opt_out_index ) {
+b32 string_find_set_rev( String str, String set, usize* opt_out_index ) {
     for( usize i = str.len; i-- > 0; ) {
         if( char_in_set( str.cc[i], set ) ) {
             if( opt_out_index ) {
@@ -2491,8 +2398,8 @@ b32 string_find_set_rev( string str, string set, usize* opt_out_index ) {
     }
     return false;
 }
-b32 string_find_string( string str, string substr, usize* opt_out_index ) {
-    string rem = str;
+b32 string_find_string( String str, String substr, usize* opt_out_index ) {
+    String rem = str;
     if( rem.len < substr.len ) {
         return false;
     }
@@ -2500,25 +2407,25 @@ b32 string_find_string( string str, string substr, usize* opt_out_index ) {
     while( rem.len ) {
         usize start = 0;
         if( string_find( rem, substr.cc[0], &start ) ) {
-            rem = string_adv_by( rem, start );
+            rem = string_advance_by( rem, start );
             if( rem.len < substr.len ) {
                 return false;
             }
 
-            if( string_cmp_clamped( rem, substr ) ) {
+            if( string_cmp( string_truncate(rem, substr.len), substr ) ) {
                 if( opt_out_index ) {
                     *opt_out_index = rem.cc - str.cc;
                 }
                 return true;
             }
-            rem = string_adv( rem );
+            rem = string_advance( rem );
         } else {
             break;
         }
     }
     return false;
 }
-b32 string_find_string_rev( string str, string substr, usize* opt_out_index ) {
+b32 string_find_string_rev( String str, String substr, usize* opt_out_index ) {
     if( str.len < substr.len ) {
         return false;
     }
@@ -2529,7 +2436,7 @@ b32 string_find_string_rev( string str, string substr, usize* opt_out_index ) {
         if( str.len - i < substr.len ) {
             break;
         }
-        string part = string_new( substr.len, str.cc + i );
+        String part = string_new( substr.len, str.cc + i );
 
         if( string_cmp( part, substr ) ) {
             if( opt_out_index ) {
@@ -2540,25 +2447,25 @@ b32 string_find_string_rev( string str, string substr, usize* opt_out_index ) {
     }
     return false;
 }
-char* string_first( string str ) {
+char* string_first( String str ) {
     if( string_is_empty( str ) ) {
         return NULL;
     }
     return (char*)str.cc;
 }
-char* string_last( string str ) {
+char* string_last( String str ) {
     if( string_is_empty( str ) ) {
         return NULL;
     }
     return (char*)( str.cc + (str.len - 1) );
 }
-string string_adv( string str ) {
+String string_advance( String str ) {
     if( string_is_empty( str ) ) {
         return str;
     }
     return string_new( str.len - 1, str.cc + 1 );
 }
-string string_adv_by( string str, usize stride ) {
+String string_advance_by( String str, usize stride ) {
     if( string_is_empty( str ) ) {
         return str;
     }
@@ -2567,28 +2474,28 @@ string string_adv_by( string str, usize stride ) {
     }
     return string_new( str.len - stride, str.cc + stride );
 }
-string string_truncate( string str, usize max ) {
+String string_truncate( String str, usize max ) {
     return string_new( max > str.len ? str.len : max, str.cc );
 }
-string string_trim( string str, usize amount ) {
+String string_trim( String str, usize amount ) {
     if( amount >= str.len ) {
         return string_new( 0, str.cc );
     }
     return string_new( str.len - amount, str.cc );
 }
-string string_remove_ws_lead( string str ) {
-    string res = str;
+String string_trim_leading_whitespace( String str ) {
+    String res = str;
     while( res.len ) {
         if( isspace( *res.cc ) ) {
-            res = string_adv( res );
+            res = string_advance( res );
         } else {
             break;
         }
     }
     return res;
 }
-string string_remove_ws_trail( string str ) {
-    string res = str;
+String string_trim_trailing_whitespace( String str ) {
+    String res = str;
     while( res.len ) {
         if( isspace( *string_last( res ) ) ) {
             res.len--;
@@ -2598,11 +2505,11 @@ string string_remove_ws_trail( string str ) {
     }
     return res;
 }
-string string_remove_ws_surround( string str ) {
-    return string_remove_ws_lead( string_remove_ws_trail( str ) );
+String string_trim_surrounding_whitespace( String str ) {
+    return string_trim_leading_whitespace( string_trim_trailing_whitespace( str ) );
 }
 void string_split_at(
-    string src, usize at, b32 keep_split, string* opt_out_left, string* opt_out_right
+    String src, usize at, b32 keep_split, String* opt_out_left, String* opt_out_right
 ) {
     expect( at <= src.len,
         "index provided is outside string bounds! at: %zu", at );
@@ -2611,11 +2518,11 @@ void string_split_at(
         *opt_out_left = string_truncate( src, at );
     }
     if( opt_out_right ) {
-        *opt_out_right = string_adv_by( src, at + (keep_split ? 0 : 1) );
+        *opt_out_right = string_advance_by( src, at + (keep_split ? 0 : 1) );
     }
 }
 b32 string_split_char(
-    string src, char c, b32 keep_split, string* opt_out_left, string* opt_out_right
+    String src, char c, b32 keep_split, String* opt_out_left, String* opt_out_right
 ) {
     usize at = 0;
     if( !string_find( src, c, &at ) ) {
@@ -2624,21 +2531,21 @@ b32 string_split_char(
     string_split_at( src, at, keep_split, opt_out_left, opt_out_right );
     return true;
 }
-string* string_split_delim( string src, string delim, b32 keep_delim ) {
+String* string_split_delim( String src, String delim, b32 keep_delim ) {
     usize  count  = 0;
-    string substr = src;
+    String substr = src;
     while( substr.len ) {
         usize pos = 0;
         if( string_find_string( substr, delim, &pos ) ) {
             count++;
-            substr = string_adv_by( substr, pos + delim.len );
+            substr = string_advance_by( substr, pos + delim.len );
         } else {
             count++;
             break;
         }
     }
 
-    string* res = darray_empty( sizeof(string), count );
+    String* res = darray_empty( sizeof(String), count );
     expect( res, "failed to allocate string buffer!" );
 
     if( count == 1 ) {
@@ -2650,13 +2557,13 @@ string* string_split_delim( string src, string delim, b32 keep_delim ) {
         while( substr.len ) {
             usize pos = 0;
             if( string_find_string( substr, delim, &pos ) ) {
-                string chunk = substr;
+                String chunk = substr;
                 chunk.len = pos + delim.len;
 
                 expect( darray_try_push( res, &chunk ),
                     "misallocated result!" );
 
-                substr = string_adv_by( substr, chunk.len );
+                substr = string_advance_by( substr, chunk.len );
             } else {
                 expect( darray_try_push( res, &substr ),
                     "misallocated result!" );
@@ -2667,13 +2574,13 @@ string* string_split_delim( string src, string delim, b32 keep_delim ) {
         while( substr.len ) {
             usize pos = 0;
             if( string_find_string( substr, delim, &pos ) ) {
-                string chunk = substr;
+                String chunk = substr;
                 chunk.len    = pos;
 
                 expect( darray_try_push( res, &chunk ),
                     "misallocated result!" );
 
-                substr = string_adv_by( substr, chunk.len + delim.len );
+                substr = string_advance_by( substr, chunk.len + delim.len );
             } else {
                 expect( darray_try_push( res, &substr ),
                     "misallocated result!" );
@@ -2684,30 +2591,30 @@ string* string_split_delim( string src, string delim, b32 keep_delim ) {
 
     return res;
 }
-string* string_split_delim_ex(
-    string src, string delim, b32 keep_delim,
+String* string_split_delim_ex(
+    String src, String delim, b32 keep_delim,
     StringSplitDelimFilterFN* filter, void* params
 ) {
     expect( filter, "no filter function provided!" );
 
     usize  count  = 0;
-    string substr = src;
+    String substr = src;
     while( substr.len ) {
         usize pos = 0;
         if( string_find_string( substr, delim, &pos ) ) {
             count++;
-            substr = string_adv_by( substr, pos + delim.len );
+            substr = string_advance_by( substr, pos + delim.len );
         } else {
             count++;
             break;
         }
     }
 
-    string* res = darray_empty( sizeof(string), count );
+    String* res = darray_empty( sizeof(String), count );
     expect( res, "failed to allocate string buffer!" );
 
     if( count == 1 ) {
-        string filtered = filter( 0, src, params );
+        String filtered = filter( 0, src, params );
         if( filtered.len ) {
             expect( darray_try_push( res, &filtered ),
                 "misallocated result!" );
@@ -2721,7 +2628,7 @@ string* string_split_delim_ex(
         while( substr.len ) {
             usize pos = 0;
             if( string_find_string( substr, delim, &pos ) ) {
-                string chunk = substr;
+                String chunk = substr;
                 chunk.len    = pos + delim.len;
 
                 chunk = filter( index, chunk, params );
@@ -2732,9 +2639,9 @@ string* string_split_delim_ex(
                     index++;
                 }
 
-                substr = string_adv_by( substr, chunk.len );
+                substr = string_advance_by( substr, chunk.len );
             } else {
-                string filtered = filter( index++, substr, params );
+                String filtered = filter( index++, substr, params );
 
                 if( filtered.len ) {
                     expect( darray_try_push( res, &filtered ),
@@ -2747,7 +2654,7 @@ string* string_split_delim_ex(
         while( substr.len ) {
             usize pos = 0;
             if( string_find_string( substr, delim, &pos ) ) {
-                string chunk = substr;
+                String chunk = substr;
                 chunk.len    = pos;
 
                 chunk = filter( index, chunk, params );
@@ -2758,9 +2665,9 @@ string* string_split_delim_ex(
                     index++;
                 }
 
-                substr = string_adv_by( substr, chunk.len + delim.len );
+                substr = string_advance_by( substr, chunk.len + delim.len );
             } else {
-                string filtered = filter( index++, substr, params );
+                String filtered = filter( index++, substr, params );
 
                 if( filtered.len ) {
                     expect( darray_try_push( res, &filtered ),
@@ -2775,7 +2682,7 @@ string* string_split_delim_ex(
 
 }
 
-usize string_len_utf8( string str ) {
+usize string_len_utf8( String str ) {
     const unsigned char* ucc = (const unsigned char*)str.cc;
     usize res = 0;
     for( usize i = 0; i < str.len; ++i ) {
@@ -2786,13 +2693,13 @@ usize string_len_utf8( string str ) {
     return res;
 }
 
-dstring* dstring_empty( usize cap ) {
+DString* dstring_empty( usize cap ) {
     usize capacity = cap ? cap : 1;
     struct DynamicString* res = memory_alloc( sizeof(*res) + capacity );
     res->cap = capacity;
     return res->buf;
 }
-dstring* dstring_new( usize len, const char* str ) {
+DString* dstring_new( usize len, const char* str ) {
     struct DynamicString* res = dstring_head( dstring_empty( len + 1 ) );
     if( !res ) {
         return NULL;
@@ -2801,7 +2708,7 @@ dstring* dstring_new( usize len, const char* str ) {
     res->len = len;
     return res->buf;
 }
-dstring* dstring_fmt_va( const cstr* format, va_list va ) {
+DString* dstring_fmt_va( const char* format, va_list va ) {
     va_list va2;
     va_copy( va2, va );
 
@@ -2818,14 +2725,14 @@ dstring* dstring_fmt_va( const cstr* format, va_list va ) {
 
     return res->buf;
 }
-dstring* dstring_fmt( const cstr* format, ... ) {
+DString* dstring_fmt( const char* format, ... ) {
     va_list va;
     va_start( va, format );
-    dstring* res = dstring_fmt_va( format, va );
+    DString* res = dstring_fmt_va( format, va );
     va_end( va );
     return res;
 }
-dstring* dstring_grow( dstring* str, usize amount ) {
+DString* dstring_grow( DString* str, usize amount ) {
     struct DynamicString* res = dstring_head( str );
     usize old_size = sizeof(struct DynamicString) + res->cap;
     usize new_size = old_size + amount;
@@ -2838,10 +2745,10 @@ dstring* dstring_grow( dstring* str, usize amount ) {
     res->cap += amount;
     return res->buf;
 }
-dstring* dstring_clone( const dstring* src ) {
+DString* dstring_clone( const DString* src ) {
     return dstring_from_string( string_from_dstring( src ) );
 }
-dstring* dstring_concat( string lhs, string rhs ) {
+DString* dstring_concat( String lhs, String rhs ) {
     usize len        = lhs.len + rhs.len;
     usize total_size = len + 8;
     struct DynamicString* res = dstring_head( dstring_empty( total_size ) );
@@ -2853,8 +2760,8 @@ dstring* dstring_concat( string lhs, string rhs ) {
 
     return res->buf;
 }
-dstring* dstring_concat_multi(
-    usize count, const string* strings, string opt_separator
+DString* dstring_concat_multi(
+    usize count, const String* strings, String opt_separator
 ) {
     expect( count, "did not provide any strings!" );
     usize total_size = (count - 1) * opt_separator.len;
@@ -2862,7 +2769,7 @@ dstring* dstring_concat_multi(
         total_size += strings[i].len;
     }
 
-    dstring* res = dstring_empty( total_size + 1 );
+    DString* res = dstring_empty( total_size + 1 );
 
     if( opt_separator.len ) {
         for( usize i = 0; i < count; ++i ) {
@@ -2879,26 +2786,26 @@ dstring* dstring_concat_multi(
 
     return res;
 }
-dstring* dstring_concat_multi_cstr(
-    usize count, const cstr** strings, const cstr* opt_separator
+DString* dstring_concat_multi_cstr(
+    usize count, const char** strings, const char* opt_separator
 ) {
     expect( count, "did not provide any strings!" );
-    usize seplen     = opt_separator ? cstr_len( opt_separator ) : 0;
+    usize seplen     = opt_separator ? strlen( opt_separator ) : 0;
     usize total_size = (count - 1) * seplen;
     for( usize i = 0; i < count; ++i ) {
-        const cstr* current = strings[i];
+        const char* current = strings[i];
         if( !current ) {
             continue;
         }
-        total_size += cstr_len( current );
+        total_size += strlen( current );
     }
 
-    dstring* res = dstring_empty( total_size + 1 );
+    DString* res = dstring_empty( total_size + 1 );
 
     if( opt_separator && seplen ) {
-        string sep = string_new( seplen, opt_separator );
+        String sep = string_new( seplen, opt_separator );
         for( usize i = 0; i < count; ++i ) {
-            const cstr* current = strings[i];
+            const char* current = strings[i];
             if( !current ) {
                 continue;
             }
@@ -2910,7 +2817,7 @@ dstring* dstring_concat_multi_cstr(
         }
     } else {
         for( usize i = 0; i < count; ++i ) {
-            const cstr* current = strings[i];
+            const char* current = strings[i];
             if( !current ) {
                 continue;
             }
@@ -2920,7 +2827,7 @@ dstring* dstring_concat_multi_cstr(
 
     return res;
 }
-dstring* dstring_append( dstring* str, string append ) {
+DString* dstring_append( DString* str, String append ) {
     struct DynamicString* res = dstring_head( str );
 
     if( res->len + append.len + 1 > res->cap ) {
@@ -2935,7 +2842,7 @@ dstring* dstring_append( dstring* str, string append ) {
     res->buf[res->len] = 0;
     return res->buf;
 }
-dstring* dstring_prepend( dstring* str, string prepend ) {
+DString* dstring_prepend( DString* str, String prepend ) {
     struct DynamicString* res = dstring_head( str );
 
     if( res->len + prepend.len + 1 > res->cap ) {
@@ -2951,7 +2858,7 @@ dstring* dstring_prepend( dstring* str, string prepend ) {
     res->len += prepend.len;
     return res->buf;
 }
-dstring* dstring_insert( dstring* str, string insert, usize at ) {
+DString* dstring_insert( DString* str, String insert, usize at ) {
     if( at == 0 ) {
         return dstring_prepend( str, insert );
     }
@@ -2979,7 +2886,7 @@ dstring* dstring_insert( dstring* str, string insert, usize at ) {
 
     return res->buf;
 }
-dstring* dstring_push( dstring* str, char c ) {
+DString* dstring_push( DString* str, char c ) {
     struct DynamicString* res = dstring_head( str );
     if( res->len + 2 >= res->cap ) {
         res = dstring_head( dstring_grow( str, 8 ) );
@@ -2992,10 +2899,10 @@ dstring* dstring_push( dstring* str, char c ) {
     res->buf[res->len]   = 0;
     return res->buf;
 }
-dstring* dstring_emplace( dstring* str, char c, usize at ) {
+DString* dstring_emplace( DString* str, char c, usize at ) {
     return dstring_insert( str, string_new( 1, &c ), at );
 }
-b32 dstring_pop( dstring* str, char* opt_out_c ) {
+b32 dstring_pop( DString* str, char* opt_out_c ) {
     struct DynamicString* head = dstring_head( str );
     if( !head->len ) {
         return false;
@@ -3008,7 +2915,7 @@ b32 dstring_pop( dstring* str, char* opt_out_c ) {
     }
     return true;
 }
-b32 dstring_remove( dstring* str, usize index ) {
+b32 dstring_remove( DString* str, usize index ) {
     struct DynamicString* head = dstring_head( str );
     if( !head->len || index > head->len ) {
         cb_warn(
@@ -3022,7 +2929,7 @@ b32 dstring_remove( dstring* str, usize index ) {
 
     return true;
 }
-b32 dstring_remove_range( dstring* str, usize from_inclusive, usize to_exclusive ) {
+b32 dstring_remove_range( DString* str, usize from_inclusive, usize to_exclusive ) {
     assertion( from_inclusive < to_exclusive,
         "dstring_remove_range: invalid range provided! (%zu, %zu]",
         from_inclusive, to_exclusive );
@@ -3044,7 +2951,7 @@ b32 dstring_remove_range( dstring* str, usize from_inclusive, usize to_exclusive
 
     return true;
 }
-void dstring_truncate( dstring* str, usize max ) {
+void dstring_truncate( DString* str, usize max ) {
     struct DynamicString* head = dstring_head( str );
     if( max >= head->len ) {
         return;
@@ -3052,48 +2959,48 @@ void dstring_truncate( dstring* str, usize max ) {
     memory_zero( head->buf + max, head->len - max );
     head->len = max;
 }
-void dstring_trim( dstring* str, usize amount ) {
+void dstring_trim( DString* str, usize amount ) {
     usize len = dstring_len( str );
     dstring_truncate( str, amount > len ? 0 : len - amount );
 }
-void dstring_clear( dstring* str ) {
+void dstring_clear( DString* str ) {
     struct DynamicString* head = dstring_head( str );
 
     memory_zero( head->buf, head->len );
     head->len = 0;
 }
-usize dstring_remaining( const dstring* str ) {
+usize dstring_remaining( const DString* str ) {
     // -1 to not include null-terminator
     return (dstring_cap( str ) - 1)  - dstring_len( str );
 }
-usize dstring_len( const dstring* str ) {
+usize dstring_len( const DString* str ) {
     return ((struct DynamicString*)str - 1)->len;
 }
-usize dstring_cap( const dstring* str ) {
+usize dstring_cap( const DString* str ) {
     return ((struct DynamicString*)str - 1)->cap;
 }
-usize dstring_total_size( const dstring* str ) {
+usize dstring_total_size( const DString* str ) {
     return dstring_cap( str ) + sizeof(struct DynamicString);
 }
-b32 dstring_is_empty( const dstring* str ) {
+b32 dstring_is_empty( const DString* str ) {
     return dstring_len( str ) == 0;
 }
-b32 dstring_is_full( const dstring* str ) {
+b32 dstring_is_full( const DString* str ) {
     return dstring_len( str ) == dstring_cap( str );
 }
-void* dstring_head( dstring* str ) {
+void* dstring_head( DString* str ) {
     if( !str ) {
         return NULL;
     }
     return str - sizeof(struct DynamicString);
 }
-const void* dstring_head_const( const dstring* str ) {
+const void* dstring_head_const( const DString* str ) {
     if( !str ) {
         return NULL;
     }
     return str - sizeof(struct DynamicString);
 }
-void dstring_free( dstring* str ) {
+void dstring_free( DString* str ) {
     struct DynamicString* head = dstring_head( str );
     if( !head ) {
         return;
@@ -3102,25 +3009,25 @@ void dstring_free( dstring* str ) {
     memory_free( head, total_size );
 }
 
-string path_cwd(void) {
+String path_cwd(void) {
     volatile struct GlobalBuffers* gb = get_global_buffers();
     return gb->cwd;
 }
-string path_home(void) {
+String path_home(void) {
     volatile struct GlobalBuffers* gb = get_global_buffers();
     return gb->home;
 }
-usize path_chunk_count( string path ) {
-    string subpath = path;
+usize path_chunk_count( String path ) {
+    String subpath = path;
     usize  count   = 0;
 
     while( subpath.len ) {
         usize sep = 0;
         if( string_find( subpath, '/', &sep ) ) {
-            string chunk = subpath;
+            String chunk = subpath;
             chunk.len    = sep;
 
-            subpath = string_adv_by( subpath, sep + 1 );
+            subpath = string_advance_by( subpath, sep + 1 );
             count++;
         } else {
             count++;
@@ -3130,23 +3037,23 @@ usize path_chunk_count( string path ) {
 
     return count;
 }
-string* path_chunk_split( string path ) {
+String* path_chunk_split( String path ) {
     usize   cap = path_chunk_count( path );
-    string* res = darray_empty( sizeof(*res), cap ? cap : 1 );
+    String* res = darray_empty( sizeof(*res), cap ? cap : 1 );
     if( !res ) {
         return NULL;
     }
 
-    string subpath = path;
+    String subpath = path;
     while( subpath.len ) {
         usize sep = 0;
         if( string_find( subpath, '/', &sep ) ) {
-            string chunk = subpath;
+            String chunk = subpath;
             chunk.len    = sep;
 
             expect( darray_try_push( res, &chunk ), "push should have worked!" );
 
-            subpath = string_adv_by( subpath, sep + 1 );
+            subpath = string_advance_by( subpath, sep + 1 );
         } else {
             expect( darray_try_push( res, &subpath ), "push should have worked!" );
             break;
@@ -3155,7 +3062,7 @@ string* path_chunk_split( string path ) {
 
     return res;
 }
-b32 path_matches_glob( string path, string glob ) {
+b32 path_matches_glob( String path, String glob ) {
     if( glob.len == 1 && glob.cc[0] == '*' ) {
         return true;
     }
@@ -3164,32 +3071,32 @@ b32 path_matches_glob( string path, string glob ) {
         if( *glob.cc != *path.cc && *glob.cc != '?' ) {
             return false;
         }
-        glob = string_adv( glob );
-        path = string_adv( path );
+        glob = string_advance( glob );
+        path = string_advance( path );
     }
 
-    string mp, cp;
+    String mp, cp;
     while( path.len ) {
         if( *glob.cc == '*' ) {
-            glob = string_adv( glob );
+            glob = string_advance( glob );
             if( !glob.len ) {
                 return true;
             }
 
             mp = glob;
-            cp = string_adv( path );
+            cp = string_advance( path );
         } else if( *glob.cc == *path.cc || *glob.cc == '?' ) {
-            glob = string_adv( glob );
-            path = string_adv( path );
+            glob = string_advance( glob );
+            path = string_advance( path );
         } else {
             glob = mp;
-            cp   = string_adv( cp );
+            cp   = string_advance( cp );
             path = cp;
         }
     }
 
     while( glob.len && *glob.cc == '*' ) {
-        glob = string_adv( glob );
+        glob = string_advance( glob );
     }
     return glob.len ? false : true;
 
@@ -3199,32 +3106,32 @@ static b32 path_walk_glob_filter_filter(
 ) {
     unused(index, stride);
 
-    string glob = *(string*)params;
-    string path = *(string*)item;
+    String glob = *(String*)params;
+    String path = *(String*)item;
 
     return path_matches_glob( path, glob );
 }
-string* path_walk_glob_filter( const WalkDirectory* wd, string glob ) {
+String* path_walk_glob_filter( const WalkDirectory* wd, String glob ) {
     assertion( wd && wd->paths, "walk result is null!" );
 
-    string* res = darray_from_filter(
-        sizeof(string), wd->count, wd->paths,
+    String* res = darray_from_filter(
+        sizeof(String), wd->count, wd->paths,
         path_walk_glob_filter_filter, &glob );
     return res;
 }
 b32 path_walk_dir(
-    const cstr* dir, b32 recursive,
+    const char* dir, b32 recursive,
     b32 include_dirs, WalkDirectory* out_result
 ) {
     assertion( dir, "no path provided!" );
     assertion( out_result, "no walk dir result provided!" );
 
-    dstring* path = dstring_from_cstr( dir );
+    DString* path = dstring_from_cstr( dir );
     if( !path ) {
         return false;
     }
 
-    dstring* buffer = dstring_empty( 255 );
+    DString* buffer = dstring_empty( 255 );
     if( !buffer ) {
         dstring_free( path );
         cb_error( "path_walk_dir: failed to allocate buffer!" );
@@ -3247,14 +3154,14 @@ b32 path_walk_dir(
     }
 
     usize total = out_result->count + count;
-    string* paths = darray_empty( sizeof(string), total );
+    String* paths = darray_empty( sizeof(String), total );
     if( !paths ) {
         dstring_free( buffer );
         return false;
     }
 
     if( out_result->buf ) {
-        dstring* concat =
+        DString* concat =
             dstring_append( out_result->buf, string_from_dstring( buffer ) );
         dstring_free( buffer );
         if( !concat ) {
@@ -3266,16 +3173,16 @@ b32 path_walk_dir(
 
     out_result->count = total;
 
-    string rem = string_from_dstring( out_result->buf );
+    String rem = string_from_dstring( out_result->buf );
     while( rem.len ) {
         usize nul = 0;
         if( string_find( rem, 0, &nul ) ) {
-            string current = rem;
+            String current = rem;
             current.len    = nul;
 
             expect( darray_try_push( paths, &current ), "miscalculated path count!" );
 
-            rem = string_adv_by( rem, nul + 1 );
+            rem = string_advance_by( rem, nul + 1 );
         } else {
             expect( darray_try_push( paths, &rem ), "miscalculated path count!" );
             break;
@@ -3301,7 +3208,7 @@ void path_walk_free( WalkDirectory* wd ) {
         memory_zero( wd, sizeof(*wd) );
     }
 }
-b32 dir_remove( const cstr* path, b32 recursive ) {
+b32 dir_remove( const char* path, b32 recursive ) {
     if( !recursive ) {
         return dir_remove_internal( path );
     }
@@ -3345,7 +3252,7 @@ b32 dir_remove( const cstr* path, b32 recursive ) {
 
 b32 fd_write_fmt_va( FD* file, const char* format, va_list va ) {
     char* formatted = local_fmt_va( format, va );
-    return fd_write( file, cstr_len( formatted ), formatted, 0 );
+    return fd_write( file, strlen( formatted ), formatted, 0 );
 }
 b32 fd_write_fmt( FD* file, const char* format, ... ) {
     va_list va;
@@ -3802,30 +3709,118 @@ b32 job_wait_all( u32 ms ) {
 u32 thread_id(void) {
     return global_thread_id;
 }
+b32 command_builder_new( const char* exe, CommandBuilder* out_builder ) {
+    out_builder->buf = darray_empty( sizeof(char), 128 );
+    if( !out_builder->buf ) {
+        return false;
+    }
+    out_builder->args = darray_empty( sizeof(const char*), 5 );
+    if( !out_builder->args ) {
+        darray_free( out_builder->buf );
+        return false;
+    }
+    command_builder_push( out_builder, exe );
+    return true;
+}
+void command_builder_clear( CommandBuilder* builder ) {
+    darray_clear( builder->buf );
+    darray_clear( builder->args );
+}
+b32 command_builder_push( CommandBuilder* builder, const char* arg ) {
+    usize arg_len = strlen( arg );
+    if( darray_remaining( builder->buf ) < arg_len + 1 ) {
+        Darray(char) new_buf = darray_grow( builder->buf, darray_cap( builder->buf ) );
+        if( !new_buf ) {
+            return false;
+        }
+        builder->buf = new_buf;
+    }
+    if( darray_remaining( builder->args ) < 1 ) {
+        Darray(const char*) new_buf =
+            darray_grow( builder->args, darray_cap( builder->args ) );
+        if( !new_buf ) {
+            return false;
+        }
+        builder->args = new_buf;
+    }
+    const char* new_arg = builder->buf + darray_len( builder->buf );
+    darray_try_append( builder->buf, arg_len + 1, arg );
 
-dstring* command_flatten_dstring( const Command* command ) {
+    darray_pop( builder->args, 0 );
+    darray_try_push( builder->args, &new_arg );
+    const char* null = 0;
+    darray_try_push( builder->args, &null );
+
+    return true;
+}
+b32 __internal_command_builder_append(
+    CommandBuilder* builder, const char* first, ...
+) {
+    if( !command_builder_push( builder, first ) ) {
+        return false;
+    }
+    va_list va;
+    va_start( va, first );
+
+    for( ;; ) {
+        const char* next = va_arg( va, const char* );
+        if( !next ) {
+            break;
+        }
+
+        if( !command_builder_push( builder, next ) ) {
+            va_end(va);
+            return false;
+        }
+    }
+
+    va_end(va);
+    return true;
+}
+b32 command_builder_append_list(
+    CommandBuilder* builder, usize count, const char** args
+) {
+    for( usize i = 0; i < count; ++i ) {
+        if( !command_builder_push( builder, args[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+Command command_builder_cmd( CommandBuilder* builder ) {
+    return (Command){
+        .count = darray_len(builder->args) - 1,
+        .args  = builder->args,
+    };
+}
+void command_builder_free( CommandBuilder* builder ) {
+    darray_free( builder->buf );
+    darray_free( builder->args );
+    memory_zero( builder, sizeof(*builder) );
+}
+DString* command_flatten_dstring( const Command* command ) {
     usize total_len = 1;
     for( usize i = 0; i < command->count; ++i ) {
-        total_len += cstr_len( command->args[i] ) + 3; // to account for potential "" and space
+        total_len += strlen( command->args[i] ) + 3; // to account for potential "" and space
     }
-    dstring* res = dstring_empty( total_len );
+    DString* res = dstring_empty( total_len );
     if( !res ) {
         return NULL;
     }
 
     for( usize i = 0; i < command->count; ++i ) {
-        const cstr* current = command->args[i];
+        const char* current = command->args[i];
         if( !current ) {
             continue;
         }
 
-        usize current_len = cstr_len( current );
+        usize current_len = strlen( current );
         if( !current_len ) {
             continue;
         }
 
         b32 contains_space = false;
-        string arg = string_new( current_len, current );
+        String arg = string_new( current_len, current );
         if( string_find( arg, ' ', 0 ) ) {
             expect( dstring_push( res, '"' ) == res, "miscalculated total_len!" );
             contains_space = true;
@@ -3843,145 +3838,6 @@ dstring* command_flatten_dstring( const Command* command ) {
     }
 
     return res;
-}
-const cstr* command_flatten_local( const Command* command ) {
-    char* buf = (char*)local_byte_buffer();
-    usize len = 0;
-
-    for( usize i = 0; i < command->count; ++i ) {
-        const cstr* current = command->args[i];
-        if( !current ) {
-            continue;
-        }
-
-        usize current_len = cstr_len( current );
-        if( !current_len ) {
-            continue;
-        }
-
-        b32 contains_space = false;
-        if( cstr_find( current, ' ', 0 ) ) {
-            buf[len++] = '"';
-            contains_space = true;
-        }
-
-        memory_copy( buf + len, current, current_len );
-        len += current_len;
-
-        if( contains_space ) {
-            buf[len++] = '"';
-        }
-
-        if( i + 1 != command->count ) {
-            buf[len++] = ' ';
-        }
-    }
-
-    return buf;
-}
-static void command_builder_set_offsets( CommandBuilder* builder, b32 is_offsets ) {
-    if( builder->is_offsets == is_offsets ) {
-        return;
-    }
-
-    usize arg_count = darray_len( builder->args ) - 1;
-    if( is_offsets ) {
-        for( usize i = 0; i < arg_count; ++i ) {
-            usize offset = (const char*)builder->args[i] - builder->buf;
-            builder->args[i] = offset;
-        }
-    } else {
-        for( usize i = 0; i < arg_count; ++i ) {
-            usize offset = builder->args[i];
-            builder->args[i] = (usize)builder->buf + offset;
-        }
-    }
-
-    builder->is_offsets = is_offsets;
-}
-b32 command_builder_new( const cstr* path, CommandBuilder* out_builder ) {
-    assertion( path, "path is null!" );
-
-    usize path_len = cstr_len( path );
-    CommandBuilder res;
-    res.is_offsets = true;
-    res.buf        = dstring_empty( 33 + path_len );
-    if( !res.buf ) {
-        return false;
-    }
-    res.args = darray_empty( sizeof(usize), 4 );
-    if( !res.args ) {
-        return false;
-    }
-
-    dstring_append_cstr( res.buf, path );
-    dstring_push( res.buf, 0 );
-
-    const char* nul = 0;
-    darray_push( res.args, &nul );
-    darray_push( res.args, &nul );
-
-    *out_builder   = res;
-    return true;
-}
-b32 command_builder_push( CommandBuilder* builder, const cstr* arg ) {
-    assertion( builder, "builder provided is null!" );
-    assertion( builder->args && builder->buf, "builder provided is malformed!" );
-    assertion( arg, "argument provided is null!" );
-
-    command_builder_set_offsets( builder, true );
-
-    if( darray_remaining( builder->args ) < 3 ) {
-        usize* _new = darray_grow( builder->args, 4 );
-        if( !_new ) {
-            return false;
-        }
-        builder->args = _new;
-    }
-
-    usize arg_len = cstr_len( arg ) + 1;
-    if( dstring_remaining( builder->buf ) < arg_len ) {
-        dstring* _new = dstring_grow( builder->buf, arg_len + 32 );
-        if( !_new ) {
-            return false;
-        }
-        builder->buf = _new;
-    }
-
-    usize offset = dstring_len( builder->buf );
-    darray_pop( builder->args, 0 );
-    darray_try_push( builder->args, &offset );
-
-    assertion(
-        darray_try_push( builder->args, (usize[]){0} ),
-        "reallocation miscalculated!" );
-    assertion(
-        dstring_append( builder->buf, string_new( arg_len, arg ) ),
-        "reallocation miscalculated!" );
-    return true;
-}
-Command command_builder_cmd( CommandBuilder* builder ) {
-    assertion( builder, "builder is null!" );
-    assertion( builder->args, "builder is malformed!" );
-
-    command_builder_set_offsets( builder, false );
-
-    Command res;
-    res.count = darray_len( builder->args ) - 1;
-    res.args  = (const char**)builder->args;
-    
-    return res;
-}
-void command_builder_free( CommandBuilder* builder ) {
-    if( builder ) {
-        if( builder->args ) {
-            darray_free( builder->args );
-        }
-        if( builder->buf ) {
-            dstring_free( builder->buf );
-        }
-        memory_zero( builder, sizeof(*builder) );
-    }
 }
 
 u8* local_byte_buffer() {
@@ -4109,7 +3965,7 @@ static time_t win32_filetime_to_posix( FILETIME ft ) {
     
     return res;
 }
-static wchar_t* win32_local_utf8_to_wide( string utf8 ) {
+static wchar_t* win32_local_utf8_to_wide( String utf8 ) {
     assertion( utf8.cc, "null pointer!" );
     assertion(
         utf8.len < CBUILD_LOCAL_WIDE_CAPACITY,
@@ -4140,7 +3996,7 @@ static wchar_t* win32_local_utf8_to_wide( string utf8 ) {
 
     return buf;
 }
-static string win32_local_wide_to_utf8( usize len, wchar_t* wide ) {
+static String win32_local_wide_to_utf8( usize len, wchar_t* wide ) {
     assertion( wide, "null pointer!" );
     assertion(
         len < CBUILD_LOCAL_WIDE_CAPACITY,
@@ -4175,7 +4031,7 @@ static string win32_local_wide_to_utf8( usize len, wchar_t* wide ) {
 
     return string_new( dst - buf, buf );
 }
-static string win32_local_error_message( DWORD error_code ) {
+static String win32_local_error_message( DWORD error_code ) {
     char* buf = (char*)local_byte_buffer();
 
     FormatMessageA(
@@ -4184,7 +4040,7 @@ static string win32_local_error_message( DWORD error_code ) {
 
     return string_from_cstr( buf );
 }
-static wchar_t* win32_local_path_canon( string path ) {
+static wchar_t* win32_local_path_canon( String path ) {
     #define PATH_RELATIVE 0
     #define PATH_HOME     1
     #define PATH_ABSOLUTE 2
@@ -4199,7 +4055,7 @@ static wchar_t* win32_local_path_canon( string path ) {
         path_type = PATH_HOME;
     }
 
-    string subpath = path;
+    String subpath = path;
 
     size_t min    = sizeof("\\\\?\\A:");
     size_t offset = sizeof("\\\\?\\") - 1;
@@ -4219,8 +4075,8 @@ static wchar_t* win32_local_path_canon( string path ) {
             home_drive = getenv( "HOMEDRIVE" );
             home       = getenv( "HOMEPATH" );
 
-            home_drive_len = cstr_len( home_drive );
-            home_len       = cstr_len( home );
+            home_drive_len = strlen( home_drive );
+            home_len       = strlen( home );
         } break;
         default: break;
     }
@@ -4243,7 +4099,7 @@ static wchar_t* win32_local_path_canon( string path ) {
                 buf + offset, CBUILD_LOCAL_WIDE_CAPACITY - offset );
             offset += home_len;
 
-            subpath = string_adv( subpath );
+            subpath = string_advance( subpath );
         } break;
         default: break;
     }
@@ -4253,16 +4109,16 @@ static wchar_t* win32_local_path_canon( string path ) {
         size_t sep = 0;
         if( string_find( subpath, '/', &sep ) ) {
             if( !sep ) {
-                subpath = string_adv( subpath );
+                subpath = string_advance( subpath );
                 continue;
             }
 
-            string chunk = subpath;
+            String chunk = subpath;
             chunk.len    = sep;
 
             if( chunk.len < 3 ) {
                 if( string_cmp( chunk, string_text( "." ) ) ) {
-                    subpath = string_adv_by( subpath, chunk.len + 1 );
+                    subpath = string_advance_by( subpath, chunk.len + 1 );
                     continue;
                 }
                 if( string_cmp( chunk, string_text( ".." ) ) ) {
@@ -4277,7 +4133,7 @@ static wchar_t* win32_local_path_canon( string path ) {
                         offset = min;
                     }
                     buf[offset] = 0;
-                    subpath = string_adv_by( subpath, chunk.len + 1 );
+                    subpath = string_advance_by( subpath, chunk.len + 1 );
                     continue;
                 }
             }
@@ -4294,7 +4150,7 @@ static wchar_t* win32_local_path_canon( string path ) {
             offset += chunk.len;
             last_chunk_len = chunk.len;
 
-            subpath = string_adv_by( subpath, chunk.len + 1 );
+            subpath = string_advance_by( subpath, chunk.len + 1 );
         } else {
             if( string_cmp( subpath, string_text( "." ) ) ) {
                 break;
@@ -4379,7 +4235,7 @@ void memory_free( void* memory, usize size ) {
         global_memory_usage += neg;
     }
 }
-b32 path_is_absolute( const cstr* path ) {
+b32 path_is_absolute( const char* path ) {
     assertion( path, "null path!" );
     if( !path[0] || !path[1] ) {
         return false;
@@ -4388,12 +4244,12 @@ b32 path_is_absolute( const cstr* path ) {
         isalpha( path[0] ) &&
         path[1] == ':';
 }
-static DWORD path_attributes( string path ) {
+static DWORD path_attributes( String path ) {
     wchar_t* wpath = win32_local_path_canon( path );
     return GetFileAttributesW( wpath );
 }
-b32 path_is_directory( const cstr* path ) {
-    string spath = string_from_cstr( path );
+b32 path_is_directory( const char* path ) {
+    String spath = string_from_cstr( path );
     DWORD attr   = path_attributes( spath );
 
     if( attr == INVALID_FILE_ATTRIBUTES ) {
@@ -4402,17 +4258,17 @@ b32 path_is_directory( const cstr* path ) {
         return attr & FILE_ATTRIBUTE_DIRECTORY;
     }
 }
-b32 path_exists( const cstr* path ) {
+b32 path_exists( const char* path ) {
     assertion( path, "null path!" );
-    string spath = string_from_cstr( path );
+    String spath = string_from_cstr( path );
     return path_attributes( spath ) != INVALID_FILE_ATTRIBUTES;
 }
 static b32 path_walk_dir_internal_long(
-    dstring** path, b32 recursive, b32 include_dirs,
-    usize* out_count, dstring** out_buffer
+    DString** path, b32 recursive, b32 include_dirs,
+    usize* out_count, DString** out_buffer
 ) {
     usize original_len = dstring_len( *path );
-    dstring* _new = dstring_append( *path, string_text( "/*" ) );
+    DString* _new = dstring_append( *path, string_text( "/*" ) );
     if( !_new ) {
         return false;
     }
@@ -4446,7 +4302,7 @@ static b32 path_walk_dir_internal_long(
         *path = _new;
 
         usize name_len = wcslen( fd.cFileName );
-        string npath   = win32_local_wide_to_utf8( name_len, fd.cFileName );
+        String npath   = win32_local_wide_to_utf8( name_len, fd.cFileName );
 
         _new = dstring_append( *path, npath );
         if( !_new ) {
@@ -4496,8 +4352,8 @@ static b32 path_walk_dir_internal_long(
     return true;
 }
 static b32 path_walk_dir_internal(
-    dstring** path, b32 recursive, b32 include_dirs,
-    usize* out_count, dstring** out_buffer
+    DString** path, b32 recursive, b32 include_dirs,
+    usize* out_count, DString** out_buffer
 ) {
     return path_walk_dir_internal_long(
         path, recursive, include_dirs, out_count, out_buffer );
@@ -4522,7 +4378,7 @@ static DWORD fd_open_dwcreationdisposition( FileOpenFlags flags ) {
     }
     return res;
 }
-static b32 fd_open_long( string path, FileOpenFlags flags, FD* out_file ) {
+static b32 fd_open_long( String path, FileOpenFlags flags, FD* out_file ) {
     DWORD dwDesiredAccess       = fd_open_dwaccess( flags );
     DWORD dwShareMode           = FILE_SHARE_READ | FILE_SHARE_WRITE;
     DWORD dwCreationDisposition = fd_open_dwcreationdisposition( flags );
@@ -4535,7 +4391,7 @@ static b32 fd_open_long( string path, FileOpenFlags flags, FD* out_file ) {
         dwCreationDisposition, dwFlagsAndAttributes, 0 );
     if( handle == INVALID_HANDLE_VALUE ) {
         DWORD error_code = GetLastError();
-        string msg = win32_local_error_message( error_code );
+        String msg = win32_local_error_message( error_code );
 
         cb_error(
             "failed to open '%S'! reason: (0x%X) %s", wide, error_code, msg.cc );
@@ -4546,11 +4402,11 @@ static b32 fd_open_long( string path, FileOpenFlags flags, FD* out_file ) {
     return true;
 }
 
-b32 fd_open( const cstr* path, FileOpenFlags flags, FD* out_file ) {
+b32 fd_open( const char* path, FileOpenFlags flags, FD* out_file ) {
     if( !validate_file_flags( flags ) ) {
         return false;
     }
-    string path_str = string_from_cstr( path );
+    String path_str = string_from_cstr( path );
     return fd_open_long( path_str, flags, out_file );
 }
 void fd_close( FD* file ) {
@@ -4734,7 +4590,7 @@ usize fd_query_position( FD* file ) {
 
 }
 static void file_query_time_long(
-    string path, FILETIME* out_create, FILETIME* out_modify
+    String path, FILETIME* out_create, FILETIME* out_modify
 ) {
     DWORD dwDesiredAccess       = 0;
     DWORD dwCreationDisposition = OPEN_EXISTING;
@@ -4755,25 +4611,25 @@ static void file_query_time_long(
 
     CloseHandle( handle );
 }
-time_t file_query_time_create( const cstr* path ) {
+time_t file_query_time_create( const char* path ) {
     FILETIME create;
     memory_zero( &create, sizeof(create) );
 
-    usize path_len = cstr_len( path );
+    usize path_len = strlen( path );
     file_query_time_long( string_new( path_len, path ), &create, 0 );
 
     return win32_filetime_to_posix( create );
 }
-time_t file_query_time_modify( const cstr* path ) {
+time_t file_query_time_modify( const char* path ) {
     FILETIME modify;
     memory_zero( &modify, sizeof(modify) );
 
-    usize path_len = cstr_len( path );
+    usize path_len = strlen( path );
     file_query_time_long( string_new( path_len, path ), 0, &modify );
     return win32_filetime_to_posix( modify );
 }
 
-static b32 file_move_long( string dst, string src ) {
+static b32 file_move_long( String dst, String src ) {
     wchar_t* dst_wide = win32_local_path_canon( dst );
     wchar_t* src_wide = win32_local_path_canon( src );
 
@@ -4781,16 +4637,16 @@ static b32 file_move_long( string dst, string src ) {
     return res == TRUE;
 }
 
-b32 file_move( const cstr* dst, const cstr* src ) {
+b32 file_move( const char* dst, const char* src ) {
     assertion( dst && src, "null path provided!" );
-    usize dst_len = cstr_len( dst );
-    usize src_len = cstr_len( src );
+    usize dst_len = strlen( dst );
+    usize src_len = strlen( src );
 
     return
         file_move_long( string_new( dst_len, dst ), string_new( src_len, src ) );
 }
 
-static b32 file_copy_long( string dst, string src ) {
+static b32 file_copy_long( String dst, String src ) {
     wchar_t* dst_wide = win32_local_path_canon( dst );
     wchar_t* src_wide = win32_local_path_canon( src );
 
@@ -4798,23 +4654,23 @@ static b32 file_copy_long( string dst, string src ) {
     return res == TRUE;
 }
 
-b32 file_copy( const cstr* dst, const cstr* src ) {
+b32 file_copy( const char* dst, const char* src ) {
     assertion( dst && src, "null path provided!" );
-    usize dst_len = cstr_len( dst );
-    usize src_len = cstr_len( src );
+    usize dst_len = strlen( dst );
+    usize src_len = strlen( src );
 
     return
         file_copy_long( string_new( dst_len, dst ), string_new( src_len, src ) );
 }
-static b32 file_remove_long( string path ) {
+static b32 file_remove_long( String path ) {
     wchar_t* path_wide = win32_local_path_canon( path );
     return DeleteFileW( path_wide ) != FALSE;
 }
-b32 file_remove( const cstr* path ) {
-    usize path_len = cstr_len( path );
+b32 file_remove( const char* path ) {
+    usize path_len = strlen( path );
     return file_remove_long( string_new( path_len, path ) );
 }
-static b32 dir_create_long( string path ) {
+static b32 dir_create_long( String path ) {
     wchar_t* wpath = win32_local_path_canon( path );
     if( CreateDirectoryW( wpath, 0 ) ) {
         return true;
@@ -4823,16 +4679,16 @@ static b32 dir_create_long( string path ) {
         return res == ERROR_ALREADY_EXISTS;
     }
 }
-b32 dir_create( const cstr* path ) {
-    usize len = cstr_len( path );
+b32 dir_create( const char* path ) {
+    usize len = strlen( path );
     return dir_create_long( string_new( len, path ) );
 }
-static b32 dir_remove_internal_long( string path ) {
+static b32 dir_remove_internal_long( String path ) {
     wchar_t* wpath = win32_local_path_canon( path );
     return RemoveDirectoryW( wpath );
 }
-static b32 dir_remove_internal( const cstr* path ) {
-    usize len = cstr_len( path );
+static b32 dir_remove_internal( const char* path ) {
+    usize len = strlen( path );
     return dir_remove_internal_long( string_new( len, path ) );
 }
 
@@ -4945,13 +4801,13 @@ void pipe_close( Pipe pipe ) {
     HANDLE handle = (HANDLE)pipe;
     CloseHandle( handle );
 }
-b32 process_in_path( const cstr* process_name ) {
+b32 process_in_path( const char* process_name ) {
     char* cmd = local_fmt( "where.exe %s /Q", process_name );
     return system( cmd ) == 0;
 }
 PID process_exec(
     Command cmd, b32 redirect_void, ReadPipe* opt_stdin,
-    WritePipe* opt_stdout, WritePipe* opt_stderr, const cstr* opt_cwd
+    WritePipe* opt_stdout, WritePipe* opt_stderr, const char* opt_cwd
 ) {
     STARTUPINFOW        startup;
     PROCESS_INFORMATION info;
@@ -4993,7 +4849,7 @@ PID process_exec(
 
     usize cmd_line_utf8_len = 0;
     for( usize i = 0; i < cmd.count; ++i ) {
-        cmd_line_utf8_len += cstr_len( cmd.args[i] );
+        cmd_line_utf8_len += strlen( cmd.args[i] );
     }
 
     usize wide_cmd_line_cap  = cmd_line_utf8_len + 8 + cmd.count;
@@ -5005,7 +4861,7 @@ PID process_exec(
     expect( cmd_line, "failed to allocate command line wide buffer!" );
 
     for( usize i = 0; i < cmd.count; ++i ) {
-        string current = string_from_cstr( cmd.args[i] );
+        String current = string_from_cstr( cmd.args[i] );
         if( !current.cc || !current.len ) {
             continue;
         }
@@ -5052,7 +4908,7 @@ int process_wait( PID pid ) {
     switch( res ) {
         case WAIT_OBJECT_0: break;
         default: {
-            string reason = win32_local_error_message( GetLastError() );
+            String reason = win32_local_error_message( GetLastError() );
             panic( "failed to wait for pid! reason: %s", reason.cc );
             return -1;
         } break;
@@ -5074,7 +4930,7 @@ b32 process_wait_timed( PID pid, int* opt_out_res, u32 ms ) {
             success = false;
         } break;
         default: {
-            string reason = win32_local_error_message( GetLastError() );
+            String reason = win32_local_error_message( GetLastError() );
             panic( "failed to wait for pid! reason: %s", reason.cc );
             return -1;
         } break;
@@ -5146,7 +5002,7 @@ char* internal_home(void) {
     const char* home  = getenv( "HOMEPATH" );
     expect( home, "failed to get home path!" );
 
-    dstring* buf = dstring_concat_cstr( drive, home );
+    DString* buf = dstring_concat_cstr( drive, home );
     expect( buf, "failed to allocate home directory buffer!" );
 
     usize len = dstring_len( buf );
@@ -5250,13 +5106,13 @@ void memory_free( void* memory, usize size ) {
         global_memory_usage += neg;
     }
 }
-b32 path_is_absolute( const cstr* path ) {
+b32 path_is_absolute( const char* path ) {
     return *path == '/';
 }
-b32 path_exists( const cstr* path ) {
+b32 path_exists( const char* path ) {
     return access( path, F_OK ) == 0;
 }
-b32 path_is_directory( const cstr* path ) {
+b32 path_is_directory( const char* path ) {
     struct stat s;
     int res = stat( path, &s );
     if( res == -1 ) {
@@ -5266,8 +5122,8 @@ b32 path_is_directory( const cstr* path ) {
     return S_ISDIR( s.st_mode );
 }
 static b32 path_walk_dir_internal(
-    dstring** path, b32 recursive, b32 include_dirs,
-    usize* out_count, dstring** out_buffer
+    DString** path, b32 recursive, b32 include_dirs,
+    usize* out_count, DString** out_buffer
 ) {
     struct dirent* entry;
     DIR* dir = opendir( *path );
@@ -5280,20 +5136,20 @@ static b32 path_walk_dir_internal(
 
     while( (entry = readdir( dir )) ) {
         if(
-            cstr_cmp( entry->d_name, "." ) ||
-            cstr_cmp( entry->d_name, ".." ) ||
-            cstr_cmp( entry->d_name, ".git" )
+            strcmp( entry->d_name, "." )    == 0 ||
+            strcmp( entry->d_name, ".." )   == 0 ||
+            strcmp( entry->d_name, ".git" ) == 0
         ) {
             continue;
         }
-        dstring* _new = dstring_push( *path, '/' );
+        DString* _new = dstring_push( *path, '/' );
         if( !_new ) {
             closedir( dir );
             return false;
         }
         *path = _new;
 
-        usize name_len = cstr_len( entry->d_name );
+        usize name_len = strlen( entry->d_name );
         _new = dstring_append( *path, string_new( name_len, entry->d_name ) );
         if( !_new ) {
             closedir( dir );
@@ -5352,7 +5208,7 @@ static b32 path_walk_dir_internal(
     return true;
 }
 
-b32 fd_open( const cstr* path, FileOpenFlags flags, FD* out_file ) {
+b32 fd_open( const char* path, FileOpenFlags flags, FD* out_file ) {
     if( !validate_file_flags( flags ) ) {
         return false;
     }
@@ -5439,22 +5295,22 @@ usize fd_query_position( FD* file ) {
     expect( pos >= 0, "failed to get current file position!" );
     return pos;
 }
-time_t file_query_time_create( const cstr* path ) {
+time_t file_query_time_create( const char* path ) {
     struct stat st;
     expect( stat( path, &st ) == 0,
         "failed to query create time for '%s'!", path );
     return st.st_ctime;
 }
-time_t file_query_time_modify( const cstr* path ) {
+time_t file_query_time_modify( const char* path ) {
     struct stat st;
     expect( stat( path, &st ) == 0,
         "failed to query modify time for '%s'!", path );
     return st.st_mtime;
 }
-b32 file_move( const cstr* dst, const cstr* src ) {
+b32 file_move( const char* dst, const char* src ) {
     return rename( src, dst ) == 0;
 }
-b32 file_copy( const cstr* dst, const cstr* src ) {
+b32 file_copy( const char* dst, const char* src ) {
     FD src_file, dst_file;
     if( !fd_open( src, FOPEN_READ, &src_file ) ) {
         return false;
@@ -5498,11 +5354,11 @@ b32 file_copy( const cstr* dst, const cstr* src ) {
     fd_close( &dst_file );
     return true;
 }
-b32 file_remove( const cstr* path ) {
+b32 file_remove( const char* path ) {
     int res = remove( path );
     return res == 0;
 }
-b32 dir_create( const cstr* path ) {
+b32 dir_create( const char* path ) {
     int res = mkdir( path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH );
     if( res == 0 ) {
         return true;
@@ -5512,7 +5368,7 @@ b32 dir_create( const cstr* path ) {
         default:     return false;
     }
 }
-static b32 dir_remove_internal( const cstr* path ) {
+static b32 dir_remove_internal( const char* path ) {
     int res = rmdir( path );
     return res == 0;
 }
@@ -5654,7 +5510,7 @@ void pipe_close( Pipe pipe ) {
     close( pipe );
 }
 
-b32 process_in_path( const cstr* process_name ) {
+b32 process_in_path( const char* process_name ) {
     Command cmd = command_new( "which", process_name );
 
     PID pid = process_exec( cmd, true, 0, 0, 0, 0 );
@@ -5664,7 +5520,7 @@ b32 process_in_path( const cstr* process_name ) {
 }
 PID process_exec(
     Command cmd, b32 redirect_void, ReadPipe* opt_stdin,
-    WritePipe* opt_stdout, WritePipe* opt_stderr, const cstr* opt_cwd
+    WritePipe* opt_stdout, WritePipe* opt_stderr, const char* opt_cwd
 ) {
     ReadPipe   stdin_;
     WritePipe stdout_;
@@ -5699,7 +5555,7 @@ PID process_exec(
     expect_crash( dup2( stdout_, STDOUT_FILENO ) >= 0, "failed to setup stdout!" );
     expect_crash( dup2( stderr_, STDERR_FILENO ) >= 0, "failed to setup stderr!" );
 
-    dstring* flat = command_flatten_dstring( &cmd );
+    DString* flat = command_flatten_dstring( &cmd );
     if( flat ) {
         cb_info( "%s", flat );
         dstring_free( flat );

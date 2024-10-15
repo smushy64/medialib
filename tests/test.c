@@ -15,6 +15,8 @@
 
 #define text( lit ) sizeof(lit) - 1, lit
 
+#define AUDIO_TOGGLE 0
+
 void logging_callback(
     MediaLoggingLevel level, uint32_t len, const char* message, void* params
 ) {
@@ -159,6 +161,8 @@ int main( int argc, char** argv ) {
         return -1;
     }
 
+    #if AUDIO_TOGGLE
+
     uintptr_t audio_device_list_size   = audio_device_list_query_memory_requirement();
     AudioDeviceList* audio_device_list = malloc( audio_device_list_size );
     memset( audio_device_list, 0, audio_device_list_size );
@@ -219,6 +223,8 @@ int main( int argc, char** argv ) {
     audio_device_list_destroy( audio_device_list );
     free( audio_device_list );
 
+    #endif
+
     SurfaceCreateFlags flags = 0;
 
     flags |= SURFACE_CREATE_FLAG_RESIZEABLE;
@@ -257,6 +263,7 @@ int main( int argc, char** argv ) {
 
     glClearColor( 1.0f, 0, 0, 1.0f );
 
+    #if AUDIO_TOGGLE
     audio_device_query_format( audio_device, &format );
 
     printf( "channel_count:      %u\n", format.channel_count );
@@ -264,11 +271,14 @@ int main( int argc, char** argv ) {
     printf( "samples_per_second: %u\n", format.samples_per_second );
     printf( "sample_count:       %u\n", format.sample_count );
 
-    double last_ms = get_ms();
 
     uint32_t channel_sample_size =
         (format.bits_per_sample / 8);
     printf( "channel_sample_size: %u\n", channel_sample_size );
+
+    #endif
+
+    double last_ms = get_ms();
 
     float r = 0;
     float g = 0;
@@ -276,6 +286,8 @@ int main( int argc, char** argv ) {
     double offset0 = 0.0;
     double offset1 = 1.2;
     double offset2 = 1.3;
+
+    #if AUDIO_TOGGLE
 
     const double tone_hz = 256.0;
     int16_t tone_volume  = 3000;
@@ -291,6 +303,8 @@ int main( int argc, char** argv ) {
     if( !audio_device_start( audio_device ) ) {
         return -1;
     }
+
+    #endif
 
     bool lock    = false;
     while( is_running ) {
@@ -333,6 +347,7 @@ int main( int argc, char** argv ) {
         offset1 += 0.00001;
         offset2 += 0.00002;
 
+        #if AUDIO_TOGGLE
         struct AudioBuffer buf;
         memset( &buf, 0, sizeof(buf) );
         if( audio_device_buffer_lock( audio_device, &buf ) ) {
@@ -353,13 +368,16 @@ int main( int argc, char** argv ) {
 
             audio_device_buffer_unlock( audio_device, &buf );
         }
+        #endif
 
         opengl_swap_buffers( surface );
     }
 
+#if AUDIO_TOGGLE
     audio_device_stop( audio_device );
     audio_device_close( audio_device );
     free( audio_device );
+#endif
 
     opengl_context_unbind();
     opengl_context_destroy( rc );

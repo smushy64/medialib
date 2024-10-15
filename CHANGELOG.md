@@ -20,6 +20,7 @@ Indicates additions to API, minor bug fixes and other small changes.
 
 0.1.1
 -----
+- defines: added define for platform posix.
 - tests: updated to use stdint and stdbool types.
 - cbuild: copied latest version.
 - cbuild: completely rewritten and now has flags for posix platforms.

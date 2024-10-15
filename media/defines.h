@@ -41,6 +41,10 @@
     #define MEDIA_PLATFORM_UNKNOWN
 #endif
 
+#if defined(MEDIA_PLATFORM_LINUX) || defined(MEDIA_PLATFORM_ANDROID) || defined(MEDIA_PLATFORM_IOS) || defined(MEDIA_PLATFORM_MACOS)
+    #define MEDIA_PLATFORM_POSIX
+#endif
+
 #if defined(__i386__) || defined(_M_IX86)
     #undef MEDIA_ARCH_X86
     /// @brief Architecture is x86.

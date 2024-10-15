@@ -22,3 +22,8 @@
     #include "impl/win32/audio.c"
 #endif
 
+#if defined(MEDIA_PLATFORM_POSIX)
+    #include "impl/sdl/lib.c"
+    #include "impl/sdl/surface.c"
+    #include "impl/sdl/input.c"
+#endif

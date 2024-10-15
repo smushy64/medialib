@@ -123,12 +123,12 @@ attr_media_api void opengl_context_destroy( OpenGLRenderContext* glrc );
 /// @brief Share display lists between OpenGL contexts.
 ///
 /// Display lists include shaders, vertex arrays, textures and buffers.
-/// @param[in] a, b OpenGL contexts to share display lists between.
+/// @param[in] src, dst OpenGL contexts to share display lists between.
 /// @return
 /// - @c true if both contexts were created with the same attributes.
 /// - @c false if contexts were created with different attributes.
 attr_media_api _Bool opengl_context_share(
-    OpenGLRenderContext* a, OpenGLRenderContext* b );
+    OpenGLRenderContext* src, OpenGLRenderContext* dst );
 /// @brief OpenGL function loading procedure.
 /// @param[in] function_name Name of function to load.
 /// @return Pointer to loaded function.

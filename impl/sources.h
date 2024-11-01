@@ -23,7 +23,15 @@
 #endif
 
 #if defined(MEDIA_PLATFORM_POSIX)
-    #include "impl/sdl/lib.c"
-    #include "impl/sdl/surface.c"
-    #include "impl/sdl/input.c"
+    #if defined(MEDIA_PLATFORM_LINUX)
+        #include "impl/x11/lib.c"
+        #include "impl/x11/surface.c"
+        #include "impl/x11/input.c"
+        #include "impl/x11/opengl.c"
+    #else
+        #include "impl/sdl/lib.c"
+        #include "impl/sdl/surface.c"
+        #include "impl/sdl/input.c"
+        #include "impl/sdl/opengl.c"
+    #endif
 #endif

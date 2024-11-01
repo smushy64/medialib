@@ -9,6 +9,7 @@
 #include "media/surface.h"
 #include "media/input/keyboard.h"
 #include "media/input/mouse.h"
+#include "media/cursor.h"
 #include "impl/sdl/surface.h"
 #include "media/internal/logging.h"
 #include <SDL3/SDL.h>
@@ -162,7 +163,10 @@ attr_media_api _Bool surface_create(
         _y = SDL_WINDOWPOS_CENTERED;
     }
 
-    SDL_Window* win = SDL_CreateWindow( title_buf, w, h, sdl_flags );
+    int width  = w ? w : 800;
+    int height = h ? h : 600;
+
+    SDL_Window* win = SDL_CreateWindow( title_buf, width, height, sdl_flags );
     if( !win ) {
         media_error( "sdl: failed to create window!" );
         return false;
@@ -171,8 +175,8 @@ attr_media_api _Bool surface_create(
     surface->handle          = win;
     surface->callback        = opt_callback;
     surface->callback_params = opt_callback_params;
-    surface->w = w;
-    surface->h = h;
+    surface->w = width;
+    surface->h = height;
     if( !(flags & SURFACE_CREATE_FLAG_HIDDEN) ) {
         surface->is_focused = true;
     }
@@ -499,6 +503,18 @@ attr_media_api void surface_set_hidden( SurfaceHandle* surface, _Bool is_hidden 
     } else {
         SDL_ShowWindow( surf->handle );
     }
+}
+attr_media_api void cursor_type_set( SurfaceHandle* surface, CursorType cursor ) {
+    // TODO(alicia): 
+    unused(surface,cursor);
+}
+attr_media_api void cursor_center( SurfaceHandle* surface ) {
+    // TODO(alicia): 
+    unused(surface);
+}
+attr_media_api void cursor_set_visible( _Bool is_visible ) {
+    // TODO(alicia): 
+    unused(is_visible);
 }
 
 KeyboardMod sdl_to_mod( SDL_Keymod mod ) {

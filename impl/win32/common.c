@@ -263,7 +263,8 @@ attr_media_api void media_lib_shutdown(void) {
     global_win32_state = NULL;
 }
 
-attr_media_api void cursor_set_visible( _Bool is_visible ) {
+attr_media_api void cursor_set_visible( SurfaceHandle* surface, _Bool is_visible ) {
+    unused(surface);
     global_win32_cursor_hidden = !is_visible;
 }
 

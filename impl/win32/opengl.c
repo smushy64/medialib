@@ -29,6 +29,23 @@ struct Win32OpenGLAttributes {
         };
         int attribs[9];
     };
+} win32_gl_attr = (struct Win32OpenGLAttributes) {
+    .dwFlags         = PFD_DOUBLEBUFFER,
+    .red             = 8,
+    .green           = 8,
+    .blue            = 8,
+    .alpha           = 8,
+    .depth           = 24,
+    .stencil         = 0,
+    .__profile_mask  = WGL_CONTEXT_PROFILE_MASK_ARB,
+    .profile         = WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+    .__major_mask    = WGL_CONTEXT_MAJOR_VERSION_ARB,
+    .major           = 3,
+    .__minor_mask    = WGL_CONTEXT_MINOR_VERSION_ARB,
+    .minor           = 3,
+    .__context_mask  = WGL_CONTEXT_FLAGS_ARB,
+    .context_flags   = 0,
+    .null_terminator = 0
 };
 
 #define WGL_CONTEXT_MAJOR_VERSION_ARB             0x2091
@@ -120,35 +137,10 @@ attr_media_api _Bool opengl_initialize(void) {
     return true;
 }
 
-struct Win32OpenGLAttributes win32_opengl_default_attrib(void) {
-    struct Win32OpenGLAttributes attrib;
-    attrib.dwFlags         = PFD_DOUBLEBUFFER;
-    attrib.red             = 8;
-    attrib.green           = 8;
-    attrib.blue            = 8;
-    attrib.alpha           = 8;
-    attrib.depth           = 24;
-    attrib.stencil         = 0;
-    attrib.__profile_mask  = WGL_CONTEXT_PROFILE_MASK_ARB;
-    attrib.profile         = WGL_CONTEXT_CORE_PROFILE_BIT_ARB;
-    attrib.__major_mask    = WGL_CONTEXT_MAJOR_VERSION_ARB;
-    attrib.major           = 3;
-    attrib.__minor_mask    = WGL_CONTEXT_MINOR_VERSION_ARB;
-    attrib.minor           = 3;
-    attrib.__context_mask  = WGL_CONTEXT_FLAGS_ARB;
-    attrib.context_flags   = 0;
-    attrib.null_terminator = 0;
-
-    return attrib;
-}
-attr_media_api OpenGLAttributeList opengl_attr_create(void) {
-    struct Win32OpenGLAttributes attrib = win32_opengl_default_attrib();
-    return *(OpenGLAttributeList*)&attrib;
-}
 attr_media_api _Bool opengl_attr_set(
-    OpenGLAttributeList* attr, OpenGLAttribute name, int value 
+    OpenGLAttribute name, int value 
 ) {
-    struct Win32OpenGLAttributes* attrib = (struct Win32OpenGLAttributes*)attr;
+    struct Win32OpenGLAttributes* attrib = &win32_gl_attr;
     switch( name ) {
         case OPENGL_ATTR_RED_SIZE: {
             attrib->red = value;
@@ -210,9 +202,9 @@ attr_media_api _Bool opengl_attr_set(
     return true;
 }
 attr_media_api int32_t opengl_attr_get(
-    OpenGLAttributeList* attr, OpenGLAttribute name 
+    OpenGLAttribute name 
 ) {
-    struct Win32OpenGLAttributes* attrib = (struct Win32OpenGLAttributes*)attr;
+    struct Win32OpenGLAttributes* attrib = &win32_gl_attr;
     switch( name ) {
         case OPENGL_ATTR_RED_SIZE              : return attrib->red;
         case OPENGL_ATTR_GREEN_SIZE            : return attrib->green;
@@ -240,17 +232,11 @@ attr_media_api int32_t opengl_attr_get(
 }
 
 attr_media_api OpenGLRenderContext* opengl_context_create(
-    SurfaceHandle* in_surface, OpenGLAttributeList* opt_attributes 
+    SurfaceHandle* in_surface
 ) {
     struct Win32Surface* surface = in_surface;
 
-    struct Win32OpenGLAttributes attr;
-    struct Win32OpenGLAttributes* attrib = &attr;
-    if( opt_attributes ) {
-        attrib  = (struct Win32OpenGLAttributes*)opt_attributes;
-    } else {
-        *attrib = win32_opengl_default_attrib();
-    }
+    struct Win32OpenGLAttributes* attrib = &win32_gl_attr;
 
     wglMakeCurrent( 0, 0 );
 

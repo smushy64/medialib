@@ -39,27 +39,32 @@ void surface_callback(
     const SurfaceCallbackData* data,
     void* params
 ) {
+    unused(surface);
     bool* is_running = params;
 
-    const char* title = surface_query_title( surface, NULL );
+    const char* title =
+        surface_query_title( surface, NULL );
+
+    #define log( fmt, args... )\
+        printf( "%s: " fmt, title, ##args )
 
     switch( data->type ) {
         case SURFACE_CALLBACK_TYPE_FOCUS: {
             is_focused = data->focus.gained;
             if( data->focus.gained ) {
-                printf( "focus gained.\n" );
+                log( "focus gained.\n" );
             } else {
-                printf( "focus lost.\n" );
+                log( "focus lost.\n" );
             }
         } break;
         case SURFACE_CALLBACK_TYPE_RESIZE: {
-            /* printf( "resize: %i %i\n", data->resize.w, data->resize.h ); */
+            /* log( "resize: %i %i\n", data->resize.w, data->resize.h ); */
         } break;
         case SURFACE_CALLBACK_TYPE_POSITION: {
-            /* printf( "move: %i %i\n", data->position.x, data->position.y ); */
+            /* log( "move: %i %i\n", data->position.x, data->position.y ); */
         } break;
         case SURFACE_CALLBACK_TYPE_TEXT: {
-            /* printf( */
+            /* log( */
             /*     "%c%c%c%c", */
             /*     data->text.utf8[0], data->text.utf8[1], */
             /*     data->text.utf8[2], data->text.utf8[3] ); */
@@ -77,7 +82,7 @@ void surface_callback(
 
             unused( L, M, R, X1, X2 );
 
-            /* printf( "mb: L[%s] M[%s] R[%s] X1[%s] X2[%s]\n", */
+            /* log( "mb: L[%s] M[%s] R[%s] X1[%s] X2[%s]\n", */
             /*     L ? "X" : " ", */
             /*     M ? "X" : " ", */
             /*     R ? "X" : " ", */
@@ -85,13 +90,13 @@ void surface_callback(
             /*     X2 ? "X" : " " ); */
         } break;
         case SURFACE_CALLBACK_TYPE_MOUSE_MOVE: {
-            /* printf( "m: %i, %i\n", data->mouse_move.x, data->mouse_move.y ); */
+            /* log( "m: %i, %i\n", data->mouse_move.x, data->mouse_move.y ); */
         } break;
         case SURFACE_CALLBACK_TYPE_MOUSE_MOVE_DELTA: {
-            /* printf( "dm: %i, %i\n", data->mouse_move_delta.x, data->mouse_move_delta.y ); */
+            /* log( "dm: %i, %i\n", data->mouse_move_delta.x, data->mouse_move_delta.y ); */
         } break;
         case SURFACE_CALLBACK_TYPE_MOUSE_WHEEL: {
-            /* printf( */
+            /* log( */
             /*     "mwheel: %s delta[%2i]\n", */
             /*     data->mouse_wheel.is_horizontal ? "horizontal" : "vertical  ", */
             /*     data->mouse_wheel.delta ); */
@@ -99,7 +104,7 @@ void surface_callback(
         case SURFACE_CALLBACK_TYPE_KEY: {
             KeyboardCode code = data->key.code;
             if( data->key.is_down ) {
-                /* printf( "%s down.\n", keyboard_code_to_string( code, 0 ) ); */
+                /* log( "%s down.\n", keyboard_code_to_string( code, 0 ) ); */
             }
 
             if( code == KB_ESCAPE ) {
@@ -108,10 +113,11 @@ void surface_callback(
         } break;
         case SURFACE_CALLBACK_TYPE_CLOSE: {
 surface_callback_close:
-            printf( "%s closing . . .\n", title );
+            log( "closing . . .\n" );
             *is_running = false;
         } break;
     }
+    #undef log
 }
 
 #if defined(MEDIA_PLATFORM_WINDOWS)
@@ -130,7 +136,8 @@ int main( int argc, char** argv ) {
 
     uintptr_t lib_size     = media_lib_query_memory_requirement();
     uintptr_t surface_size = surface_query_memory_requirement();
-    uintptr_t input_size   = input_subsystem_query_memory_requirement();
+    uintptr_t input_size   =
+        input_subsystem_query_memory_requirement();
     uintptr_t buf_size =
         input_size +
         lib_size   +
@@ -149,7 +156,7 @@ int main( int argc, char** argv ) {
 
     SurfaceHandle* surface = (uint8_t*)lib_buf + lib_size;
 
-    void* input_buf = (void*)surface + surface_size;
+    void* input_buf = (uint8_t*)surface + surface_size;
 
     if( !input_subsystem_initialize( input_buf ) ) {
         printf("failed to initialize input subsystem!\n");
@@ -231,6 +238,7 @@ int main( int argc, char** argv ) {
     flags |= SURFACE_CREATE_FLAG_DARK_MODE;
     flags |= SURFACE_CREATE_FLAG_X_CENTERED;
     flags |= SURFACE_CREATE_FLAG_Y_CENTERED;
+    flags |= SURFACE_CREATE_FLAG_OPENGL;
 
     bool is_running = true;
 
@@ -246,8 +254,10 @@ int main( int argc, char** argv ) {
         goto main_end;
     }
 
-    OpenGLRenderContext* rc = opengl_context_create( surface, NULL );
+    OpenGLRenderContext* rc = opengl_context_create( surface );
     if( !rc ) {
+        surface_destroy( surface );
+        media_lib_shutdown();
         return -1;
     }
     opengl_context_bind( surface, rc );
@@ -306,10 +316,10 @@ int main( int argc, char** argv ) {
 
     #endif
 
-    bool lock    = false;
+    bool lock = false;
     while( is_running ) {
         input_subsystem_update();
-        surface_pump_events();
+        surface_pump_events( surface );
 
         int32_t x, y;
         input_mouse_query_position( &x, &y );
@@ -379,7 +389,7 @@ int main( int argc, char** argv ) {
     free( audio_device );
 #endif
 
-    opengl_context_unbind();
+    opengl_context_unbind( surface );
     opengl_context_destroy( rc );
 
     surface_destroy( surface );

@@ -263,7 +263,7 @@ attr_media_api _Bool surface_create(
 /// @param[in] surface Handle to surface to destroy.
 attr_media_api void surface_destroy( SurfaceHandle* surface );
 /// @brief Process surface events.
-attr_media_api void surface_pump_events(void);
+attr_media_api void surface_pump_events( SurfaceHandle* surface );
 /// @brief Set surface callback function.
 /// @param[in] surface             Surface to set callback for.
 /// @param     callback            Surface callback function.
@@ -277,7 +277,8 @@ attr_media_api void surface_set_callback(
 attr_media_api void surface_clear_callback( SurfaceHandle* surface );
 /// @brief Get platform handle for surface.
 /// @details
-/// On Windows, returned value is an HWND.
+/// - On Windows, returned value is an HWND.
+/// - On Linux, returns pointer to X11 struct { Display*; Window; };
 /// @param[in] surface Surface to get handle for.
 /// @return Platform handle.
 attr_media_api void* surface_get_platform_handle( SurfaceHandle* surface );

@@ -55,7 +55,8 @@ attr_media_api void cursor_type_set( SurfaceHandle* surface, CursorType cursor )
 /// @param[in] surface Surface to center in.
 attr_media_api void cursor_center( SurfaceHandle* surface );
 /// @brief Show/hide cursor.
-/// @param is_visible If true, show cursor. If false, hide cursor.
-attr_media_api void cursor_set_visible( _Bool is_visible );
+/// @param[in] surface    Pointer to surface to hide cursor in.
+/// @param     is_visible If true, show cursor. If false, hide cursor.
+attr_media_api void cursor_set_visible( SurfaceHandle* surface, _Bool is_visible );
 
 #endif /* header guard */

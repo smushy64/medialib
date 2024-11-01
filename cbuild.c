@@ -33,7 +33,12 @@
     #define ARGS_WITH_SYMBOLS_STATIC "-ggdb"
     #define ARGS_WITH_SYMBOLS        "-ggdb"
     
-    #define ARGS_LINK "-lSDL3"
+    #if defined(PLATFORM_LINUX)
+        /* #define ARGS_LINK "-lX11", "-lXfixes", "-lXcursor", "-lXi", "-lGL" */
+        #define ARGS_LINK "-lX11", "-lXfixes", "-lXcursor", "-lGL"
+    #else
+        #define ARGS_LINK "-lSDL3"
+    #endif
 
     #define ARGS_LD   "-fPIC", "-shared"
 #endif
@@ -321,6 +326,9 @@ int mode_build( struct BuildArgs* args, CommandBuilder* opt_out_builder ) {
     f64 start = timer_milliseconds();
 
     // NOTE(alicia): finalized output path is generated here.
+
+    bool create_build = args->output == NULL;
+
     args->output = path_join(
         args->output ? args->output : "./build",
         args->name ? args->name : "libmedia" );
@@ -392,6 +400,17 @@ int mode_build( struct BuildArgs* args, CommandBuilder* opt_out_builder ) {
         return 0;
     }
 
+    if( create_build ) {
+        if( !path_exists( "./build") ) {
+            cb_info( "build: creating directory './build' . . ." );
+            if( !dir_create( "./build") ) {
+                cb_error( "build: failed to create '.build'!" );
+                return 1;
+            }
+            cb_info( "build: directory './build' created." );
+        }
+    }
+
     if( !mode_build_generate_command_line( flat ) ) {
         dstring_free( flat );
         command_builder_free(&builder);
@@ -445,7 +464,11 @@ int mode_test( struct TestArgs* args ) {
             "-DMEDIA_ENABLE_STATIC_BUILD" );
     } else {
         command_builder_append( &builder, "-L./build", "-lmedia-test" );
+#if !defined(PLATFORM_WINDOWS)
+        command_builder_append( &builder, "-Wl,-rpath,./build" );
+#endif
     }
+    command_builder_append( &builder, "-o", TEST_PATH );
 
     if( args->build.release ) {
         command_builder_append( &builder, ARGS_OPT );

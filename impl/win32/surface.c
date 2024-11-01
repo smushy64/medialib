@@ -171,10 +171,12 @@ attr_media_api void surface_destroy( SurfaceHandle* in_surface ) {
 
     memset( surface, 0, sizeof(*surface) );
 }
-attr_media_api void surface_pump_events(void) {
+attr_media_api void surface_pump_events( SurfaceHandle* in_surface ) {
+    struct Win32Surface* surface = in_surface;
+
     MSG message;
     memset( &message, 0, sizeof(message) );
-    while( PeekMessageW( &message, 0, 0, 0, PM_REMOVE ) ) {
+    while( PeekMessageW( &message, surface->hwnd, 0, 0, PM_REMOVE ) ) {
         TranslateMessage( &message );
         DispatchMessageW( &message );
     }

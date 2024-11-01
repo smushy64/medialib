@@ -64,29 +64,20 @@ typedef enum OpenGLAttribute {
     /// @details Default value is @c false
     OPENGL_ATTR_FORWARD_COMPATIBILITY,
 } OpenGLAttribute;
-/// @brief OpenGL attributes.
-typedef struct { uint8_t raw[sizeof(int) * 16]; } OpenGLAttributeList;
-/// @brief Create default OpenGL attributes array.
-///
-/// Must be destroyed with opengl_attr_destroy() to prevent memory leak.
-/// @return Pointer to attributes.
-attr_media_api OpenGLAttributeList opengl_attr_create(void);
 /// @brief Set value of an OpenGL attribute.
 /// @param[in] attr Attributes array.
 /// @param name Name of attribute to set.
 /// @param value Value to set attribute.
 /// @return True if value was valid.
 /// @see OpenGLAttribute
-attr_media_api _Bool opengl_attr_set(
-    OpenGLAttributeList* attr, OpenGLAttribute name, int value );
+attr_media_api _Bool opengl_attr_set( OpenGLAttribute name, int value );
 /// @brief Get value of an OpenGL attribute.
 /// @param[in] attr Attributes array.
 /// @param     name Name of attribute to get.
 /// @return 
 ///     - positive: Value of requested attribute.
 ///     - negative: @c name is not recognized.
-attr_media_api int32_t opengl_attr_get(
-    OpenGLAttributeList* attr, OpenGLAttribute name );
+attr_media_api int32_t opengl_attr_get( OpenGLAttribute name );
 
 /// @brief Initialize OpenGL.
 ///
@@ -95,11 +86,10 @@ attr_media_api int32_t opengl_attr_get(
 attr_media_api _Bool opengl_initialize(void);
 /// @brief Create an OpenGL render context for surface.
 /// @param[in] surface Surface to create OpenGL render context for.
-/// @param[in] opt_attributes (optional) Attributes. If NULL, uses default attributes.
 /// @return OpenGL render context for provided surface.
 /// Returns NULL if failed to create context.
 attr_media_api OpenGLRenderContext* opengl_context_create(
-    SurfaceHandle* surface, OpenGLAttributeList* opt_attributes );
+    SurfaceHandle* surface );
 /// @brief Bind the calling thread's render context to surface.
 ///
 /// Use this function to render to multiple OpenGL surfaces within the same thread.
@@ -110,8 +100,8 @@ attr_media_api _Bool opengl_context_bind(
     SurfaceHandle* surface, OpenGLRenderContext* glrc );
 /// @brief Unbind calling thread's render context.
 attr_header
-attr_always_inline void opengl_context_unbind(void) {
-    (void)opengl_context_bind( NULL, NULL );
+attr_always_inline void opengl_context_unbind( SurfaceHandle* surface ) {
+    (void)opengl_context_bind( surface, NULL );
 }
 /// @brief Delete an OpenGL render context.
 ///
